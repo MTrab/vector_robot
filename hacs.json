@@ -1,0 +1,8 @@
+{
+  "name": "DDL Vector",
+  "render_readme": true,
+  "iot_class": "cloud_polling",
+  "homeassistant": "2022.5.0",
+  "zip_release": true,
+  "filename": "ddl_vector.zip"
+}
