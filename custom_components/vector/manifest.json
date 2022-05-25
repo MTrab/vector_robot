@@ -3,7 +3,7 @@
   "documentation": "https://github.com/MTrab/ddl_vector/blob/master/README.md",
   "issue_tracker": "https://github.com/MTrab/ddl_vector/issues",
   "domain": "vector",
-  "iot_class": "cloud_poll",
+  "iot_class": "cloud_polling",
   "requirements": [],
   "after_dependencies": [],
   "codeowners": [
