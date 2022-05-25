@@ -2,7 +2,7 @@
   "name": "Digital Dream Labs Vector",
   "documentation": "https://github.com/MTrab/ddl_vector/blob/master/README.md",
   "issue_tracker": "https://github.com/MTrab/ddl_vector/issues",
-  "domain": "vector",
+  "domain": "vector_robot",
   "iot_class": "cloud_polling",
   "requirements": [],
   "after_dependencies": [],
