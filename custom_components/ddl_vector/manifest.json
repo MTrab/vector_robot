@@ -1,0 +1,14 @@
+{
+  "name": "Digital Dream Labs Vector",
+  "documentation": "https://github.com/MTrab/ddl_vector/blob/master/README.md",
+  "issue_tracker": "https://github.com/MTrab/ddl_vector/issues",
+  "domain": "vector",
+  "iot_class": "cloud_poll",
+  "requirements": [],
+  "after_dependencies": [],
+  "codeowners": [
+    "@MTrab"
+  ],
+  "config_flow": true,
+  "version": "0.0.1"
+}
