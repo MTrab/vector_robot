@@ -14,7 +14,7 @@
                     "email": "Email",
                     "password": "Password",
                     "vector_serial": "Serial Number",
-                    "vector_id": "Vector robot ID",
+                    "name": "Vector robot name",
                     "vector_ip": "Vector robot IP address"
                 },
                 "title": "Connect Digital Dream Labs Vector"

@@ -2,13 +2,17 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 import voluptuous as vol
 
-from homeassistant import config_entries, core, exceptions
-from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
+from homeassistant import config_entries, exceptions
+from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, CONF_NAME
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import CONF_IP, DOMAIN, CONF_ID, CONF_SERIAL
+
+from .const import CONF_IP, DOMAIN, CONF_SERIAL
+from .pyHomeAssistantVector import api
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -16,19 +20,43 @@ DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_EMAIL): str,
         vol.Required(CONF_PASSWORD): str,
-        vol.Required(CONF_ID): str,
+        vol.Required(CONF_NAME): str,
         vol.Required(CONF_SERIAL): str,
         vol.Required(CONF_IP): str,
     }
 )
 
 
-async def validate_input(hass: HomeAssistant, data: dict) -> str:
+async def validate_input(hass: HomeAssistant, data: dict) -> bool:
     """Validate the user input allows us to connect.
     Data has the keys from DATA_SCHEMA with values provided by the user.
     """
+    home = Path.home()
+    settings_dir = home / ".anki_vector"
+    vector_api = api(
+        data[CONF_EMAIL],
+        data[CONF_PASSWORD],
+        data[CONF_NAME],
+        data[CONF_SERIAL],
+        data[CONF_IP],
+        settings_dir,
+        async_get_clientsession(hass),
+    )
+    await vector_api.async_get_cert()
 
-    return None
+    await vector_api.async_save_cert()
+    await vector_api.async_validate_cert_name()
+
+    token = await vector_api.async_get_session_token()
+    if not token.get("session"):
+        raise Exception("Session error: {token}")
+
+    await vector_api.async_user_authentication()
+
+    # Store credentials in the .anki_vector directory's sdk_config.ini file
+    await vector_api.async_write_config()
+
+    return True
 
 
 class DDLVectorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -40,18 +68,12 @@ class DDLVectorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def check_for_existing(self, data):
         """Check whether an existing entry is using the same URLs."""
         return any(
-            entry.data.get(CONF_ID) == data.get(CONF_ID)
+            entry.data.get(CONF_NAME) == data.get(CONF_NAME)
             and entry.data.get(CONF_SERIAL) == data.get(CONF_SERIAL)
             and entry.data.get(CONF_EMAIL) == data.get(CONF_EMAIL)
             and entry.data.get(CONF_PASSWORD) == data.get(CONF_PASSWORD)
             for entry in self._async_current_entries()
         )
-
-    #         vector_id: Vector-0000 #Vectors Name
-    # vector_ip: 192.168.***.*** #Vectors IP
-    # vector_serial: '00000000' #Vectors Serial#
-    # vector_email: email@email.com #Email address used for Vector
-    # vector_password: P@55w0rd #Password used for Vector
 
     def __init__(self):
         """Initialize the config flow."""
@@ -75,10 +97,11 @@ class DDLVectorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._errors["base"] = "unknown"
 
             if "base" not in self._errors:
+                _LOGGER.debug(validated)
                 return self.async_create_entry(
-                    title=validated["title"],
+                    title=user_input[CONF_NAME],
                     data=user_input,
-                    description=f"SDK connector for {validated['title']}",
+                    description=f"SDK connector for {user_input[CONF_NAME]}",
                 )
 
         return self.async_show_form(
