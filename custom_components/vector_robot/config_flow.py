@@ -12,7 +12,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 
 from .const import CONF_IP, DOMAIN, CONF_SERIAL
-from .pyHomeAssistantVector import api
+from .api import API
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ async def validate_input(hass: HomeAssistant, data: dict) -> bool:
     """
     home = Path.home()
     settings_dir = home / ".anki_vector"
-    vector_api = api(
+    vector_api = API(
         data[CONF_EMAIL],
         data[CONF_PASSWORD],
         data[CONF_NAME],

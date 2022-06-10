@@ -1,17 +1,11 @@
 {
   "name": "Digital Dream Labs Vector",
-  "documentation": "https://github.com/MTrab/ddl_vector/blob/master/README.md",
-  "issue_tracker": "https://github.com/MTrab/ddl_vector/issues",
+  "documentation": "https://github.com/MTrab/vector_robot/blob/master/README.md",
+  "issue_tracker": "https://github.com/MTrab/vector_robot/issues",
   "domain": "vector_robot",
   "iot_class": "cloud_polling",
   "requirements": [
-    "grpcio",
-    "protobuf==3.20.0",
-    "aiogrpc>=1.4",
-    "cryptography",
-    "numpy>=1.11",
-    "Pillow>=3.3",
-    "google-api-python-client"
+    "git+https://github.com/MTrab/pyHAVector.git@master#pyHAVector==0.7.3"
   ],
   "after_dependencies": [],
   "codeowners": [
@@ -21,9 +15,6 @@
     {
       "hostname": "Vector-*"
     }
-  ],
-  "loggers": [
-    "pyHomeAssistantVector"
   ],
   "config_flow": true,
   "version": "0.0.1"

@@ -10,7 +10,7 @@ import grpc
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 
-from . import messaging
+from anki_vector import messaging
 from .const import ANKI_APP_KEY, API_URL, TOKEN_URL, USER_AGENT
 
 _LOGGER = logging.getLogger(__name__)

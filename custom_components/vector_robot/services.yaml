@@ -23,3 +23,10 @@ speak:
       required: true
       selector:
         text:
+    vector_voice:
+      name: Use Vectors voice?
+      description: If selected, uses Vectors voice - else default male voice
+      required: false
+      default: true
+      selector:
+        boolean:
