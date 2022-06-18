@@ -19,7 +19,7 @@
   ],
   "dhcp": [
     {
-      "hostname": "Vector-*"
+      "hostname": "vector-*"
     }
   ],
   "config_flow": true,
