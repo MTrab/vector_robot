@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 
 import logging
-from typing import Any, Mapping
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -27,6 +26,7 @@ from .const import (
     ICON_ROBOT,
     LANG_BATTERY,
     LANG_STATE,
+    LANG_STIMULI,
     STATE_CUBE_BATTERY_LEVEL,
     STATE_CUBE_BATTERY_VOLTS,
     STATE_CUBE_FACTORY_ID,
@@ -108,13 +108,20 @@ SENSORS = [
         translate_key=LANG_STATE,
         vector_attributes={
             STATE_FIRMWARE_VERSION: "firmware_version",
-            STATE_STIMULATION: "last_stimulation",
         },
+    ),
+    VectorSensorEntityDescription(
+        key=VectorSensorFeature.STATUS,
+        name="Stimulation",
+        icon=VECTOR_ICON[ICON_ROBOT],
+        state_attr=STATE_STIMULATION,
+        sensor_type=VectorSensorType.STATE,
+        translate_key=LANG_STIMULI,
     ),
 ]
 
 
-class VectorBaseSensorEntity(VectorBase):
+class VectorBaseSensorEntity(VectorBase, SensorEntity):
     """Defines a Vector sensor."""
 
     entity_description: VectorSensorEntityDescription
@@ -132,22 +139,10 @@ class VectorBaseSensorEntity(VectorBase):
         )
         self._attr_icon = description.icon
 
-        self._attributes = {}
-        self._state = None
-
-    @property
-    def device_class(self) -> str:
-        """Return the ID of the capability, to identify the entity for translations."""
-        return f"{DOMAIN}__{self.entity_description.translate_key}"
-
-    @property
-    def extra_state_attributes(self) -> Mapping[str, Any] | None:
-        return self._attributes
-
-    @property
-    def native_value(self) -> str:
-        """Return the state of the sensor."""
-        return self._state
+        self._attr_extra_state_attributes = {}
+        self._attr_native_value = STATE_UNKNOWN
+        self._attr_device_class = f"{DOMAIN}__{self.entity_description.translate_key}"
+        self._attr_name = self.entity_description.name
 
     async def async_added_to_hass(self) -> None:
         """Actions when added to Home Assistant."""
@@ -158,8 +153,12 @@ class VectorBaseSensorEntity(VectorBase):
 
     async def async_update_entity(self) -> None:
         """Update the entity."""
-        _LOGGER.debug(self.coordinator.states)
-        self._state = (
+        # _LOGGER.debug(
+        #     "Update called for %s\nWe have these states available:\n%s",
+        #     self._attr_name,
+        #     self.coordinator.states,
+        # )
+        self._attr_native_value = (
             self.coordinator.states[self.entity_description.state_attr]
             if self.entity_description.state_attr in self.coordinator.states
             else STATE_UNKNOWN
@@ -175,31 +174,17 @@ class VectorBaseSensorEntity(VectorBase):
                     if not isinstance(prop_data, type(None)):
                         attributes[attr] = prop_data
 
-            self._attributes.update(attributes)
+            self._attr_extra_state_attributes.update(attributes)
 
         self.async_write_ha_state()
 
 
-class VectorStateSensorEntity(VectorBaseSensorEntity, SensorEntity):
+class VectorStateSensorEntity(VectorBaseSensorEntity):
     """Defines a Vector state sensor."""
 
-    async def async_update_entity(self) -> None:
-        """Updates state when new data is available."""
-        _LOGGER.debug("Updating state sensors")
 
-        await super().async_update_entity()
-
-
-class VectorBatterySensorEntity(VectorBaseSensorEntity, SensorEntity):
+class VectorBatterySensorEntity(VectorBaseSensorEntity):
     """Defines a Vector battery sensor."""
-
-    _attr_device_class = SensorDeviceClass.BATTERY
-
-    async def async_update_entity(self):
-        """Updates battery state when received."""
-        _LOGGER.debug("Updating battery sensors")
-
-        await super().async_update_entity()
 
 
 async def async_setup_platform(

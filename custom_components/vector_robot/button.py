@@ -1,8 +1,6 @@
 """Vector robot buttons."""
 from __future__ import annotations
-from copy import deepcopy
 from dataclasses import dataclass
-from functools import partial
 
 import logging
 

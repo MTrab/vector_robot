@@ -9,6 +9,7 @@ from functools import partial
 # 192.168.1.223
 
 import logging
+import random
 from typing import Optional
 
 from homeassistant.config_entries import ConfigEntry
@@ -20,7 +21,6 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.dispatcher import dispatcher_send
-from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.loader import async_get_integration
 import pytz
@@ -28,6 +28,8 @@ import pytz
 from .anki_vector import Robot
 from .anki_vector.events import Events
 from .anki_vector.exceptions import VectorConnectionException
+from .anki_vector.user_intent import UserIntent, UserIntentEvent
+
 
 from .const import (
     ATTR_MESSAGE,
@@ -41,11 +43,16 @@ from .const import (
     SERVICE_LEAVE_CHARGER,
     SERVICE_SPEAK,
     STARTUP,
+    STATE_CARRYING_OBJECT,
+    STATE_CARRYING_OBJECT_ON_TOP,
     STATE_CUBE_BATTERY_LEVEL,
     STATE_CUBE_BATTERY_VOLTS,
     STATE_CUBE_FACTORY_ID,
     STATE_CUBE_LAST_CONTACT,
     STATE_FIRMWARE_VERSION,
+    STATE_FOUND_OBJECT,
+    STATE_HEAD_TRACKING_ID,
+    STATE_LIFT_IN_FOV,
     STATE_ROBOT_BATTERY_LEVEL,
     STATE_ROBOT_BATTERY_VOLTS,
     STATE_ROBOT_IS_CHARGNING,
@@ -61,8 +68,9 @@ from .states import (
     STIMULATIONS_TO_IGNORE,
     VectorStates,
 )
-
 from .schemes import TTS
+from .vector_utils import Chatter, DataRunner
+from .vector_utils.const import VectorDatasets
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -82,6 +90,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": None,
         "listener": None,
     }
+
+    dataset = DataRunner(hass)
+    await dataset.async_refresh()
 
     coordinator = VectorDataUpdateCoordinator(hass, entry)
     hass.data[DOMAIN][entry.entry_id]["coordinator"] = coordinator
@@ -159,35 +170,172 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
         )
         self.robot = Robot(
             self.serial,
-            default_logging=False,
             behavior_control_level=None,
+            default_logging=False,
             cache_animation_lists=False,
             enable_face_detection=True,
+            estimate_facial_expression=True,
+            enable_audio_feed=True,
             # name=self._config_data[CONF_NAME],
             ip=self._config_data[CONF_IP],
         )
         self.states = VectorStates()
+        self.chatter = Chatter()
+        self.chatter.get_text(VectorDatasets.DIALOGS, "cliff")
 
         self.robot.connect()
 
-        # Handle sktimulations
-        self.robot.events.subscribe(self.on_robot_stimulation, Events.stimulation_info)
+        def on_robot_user_intent(robot, event_type, event):
+            """React to user intents."""
+            _LOGGER.debug(event)
+            user_intent = UserIntent(event)
+            _LOGGER.debug("Received %s", user_intent.intent_event)
+            _LOGGER.debug(user_intent.intent_data)
+            if user_intent.intent_event is UserIntentEvent.greeting_hello:
+                Str = random.randint(1, 3)
+                if not robot.conn._has_control:
+                    robot.conn.request_control()
 
+                if Str == 1:
+                    robot.behavior.say_text("Stop disturbing me. I'm busy")
+                if Str == 2:
+                    robot.behavior.say_text("You again. You're always here")
+                if Str == 3:
+                    robot.behavior.say_text("Can I please have 2 minutes peace?")
+                robot.conn.release_control()
+
+        def on_event(robot, event_type, event):
+            """Used for testing events."""
+            _LOGGER.info("Event type: %s\nEvent: %s", event_type, event)
+
+        def on_robot_state(robot, event_type, event):
+            """Extract data from robot state."""
+            self.states.update(
+                {
+                    STATE_CARRYING_OBJECT: event.carrying_object_id
+                    if event.carrying_object_id != -1
+                    else None,
+                    STATE_CARRYING_OBJECT_ON_TOP: event.carrying_object_on_top_id
+                    if event.carrying_object_on_top_id != -1
+                    else None,
+                    STATE_HEAD_TRACKING_ID: event.head_tracking_object_id
+                    if event.head_tracking_object_id != -1
+                    else None,
+                }
+            )
+
+            if hasattr(event.prox_data, "lift_in_fov"):
+                self.states.update(
+                    {
+                        STATE_LIFT_IN_FOV: bool(event.prox_data.lift_in_fov),
+                    }
+                )
+            else:
+                self.states.update(
+                    {
+                        STATE_LIFT_IN_FOV: False,
+                    }
+                )
+
+            if hasattr(event.prox_data, "found_object"):
+                self.states.update(
+                    {
+                        STATE_FOUND_OBJECT: bool(event.prox_data.found_object),
+                    }
+                )
+            else:
+                self.states.update(
+                    {
+                        STATE_FOUND_OBJECT: False,
+                    }
+                )
+
+        def on_robot_time_stamped_status(robot, event_type, event):
+            """Handle time stamped events."""
+            if event.status.feature_status.feature_name:
+                if not event.status.feature_status.feature_name in FEATURES_TO_IGNORE:
+                    feature = event.status.feature_status.feature_name
+                    self.states.update({STATE_TIME_STAMPED: str(feature).lower()})
+
+                    dispatcher_send(self.hass, UPDATE_SIGNAL)
+
+        def on_robot_stimulation(robot, event_type, event):
+            """Handle robot_state events."""
+            # emotion_events: "PettingStarted"
+            # emotion_events: "PettingBlissLevelIncrease"
+            # emotion_events: "ReactToSoundAwake"
+
+            if not event.emotion_events:
+                return
+            myevent = event.emotion_events
+            if not myevent[0] in STIMULATIONS_TO_IGNORE:
+                self.states.update({STATE_STIMULATION: str(myevent[0]).lower()})
+
+            if myevent == ["PettingStarted"]:
+                _LOGGER.debug("Petting started")
+                # data = {ATTR_MESSAGE: "Oh so good!", ATTR_USE_VECTOR_VOICE: True}
+                # self.hass.services.call(
+                #     DOMAIN,
+                #     SERVICE_SPEAK,
+                #     ServiceCall(
+                #         DOMAIN,
+                #         SERVICE_SPEAK,
+                #         data=data,
+                #     ),
+                # )
+                if not robot.conn._has_control:
+                    robot.conn.request_control()
+                robot.behavior.say_text(
+                    text="Oh so good!",
+                )
+                robot.conn.release_control(timeout=1.0)
+            # elif myevent == ["PettingBlissLevelIncrease"]:
+            #     _LOGGER.debug("Still being petted")
+            #     self.robot.conn.request_control()
+            #     self.robot.behavior.say_text(
+            #         text="Oh yes - right there!",
+            #     )
+            #     self.robot.conn.release_control(timeout=1.0)
+
+            dispatcher_send(self.hass, UPDATE_SIGNAL)
+
+        def on_robot_wake_word(robot, event_type, event):
+            """React to wake word."""
+
+            if event == "wake_word_begin":
+                robot.conn.request_control()
+                robot.behavior.say_text(
+                    text="You called!",
+                )
+                robot.conn.release_control()
+
+        ### Subscribe to events
+        # Handle user intents
+        self.robot.events.subscribe(on_robot_user_intent, Events.user_intent)
+        # Handle stimulations
+        self.robot.events.subscribe(on_robot_stimulation, Events.stimulation_info)
         # Handle wake words
-        self.robot.events.subscribe(self.on_robot_wake_word, Events.wake_word)
-
+        self.robot.events.subscribe(on_robot_wake_word, Events.wake_word)
         # Handle time stamped events
         self.robot.events.subscribe(
-            self.on_robot_time_stamped_status, Events.time_stamped_status
+            on_robot_time_stamped_status, Events.time_stamped_status
         )
+        # Extract information from robot state events
+        self.robot.events.subscribe(on_robot_state, Events.robot_state)
 
-        # Register services
+        # self.robot.events.subscribe(self.on_event, Events.robot_observed_object)
+        # self.robot.events.subscribe(self.on_event, Events.robot_observed_face)
+
+        ### Register services
+        # TTS / Speak
         self.hass.services.async_register(
             DOMAIN, SERVICE_SPEAK, partial(self.async_tts), schema=TTS
         )
+        # Drive onto charger
         self.hass.services.async_register(
             DOMAIN, SERVICE_GOTO_CHARGER, partial(self.async_drive_on_charger)
         )
+        # Drive off charger
         self.hass.services.async_register(
             DOMAIN, SERVICE_LEAVE_CHARGER, partial(self.async_drive_off_charger)
         )
@@ -220,74 +368,6 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
             self.robot.conn.release_control(timeout=1.0)
         except VectorConnectionException:
             _LOGGER.warning("Something happend while sending TTS to Vector :(")
-
-    def on_robot_time_stamped_status(self, robot, event_type, event):
-        """Handle time stamped events."""
-        if event.status.feature_status.feature_name:
-            if not event.status.feature_status.feature_name in FEATURES_TO_IGNORE:
-                _LOGGER.debug(
-                    "Setting time stamped event: %s",
-                    event,
-                )
-
-                feature = event.status.feature_status.feature_name
-                self.states.update({STATE_TIME_STAMPED: str(feature).lower()})
-
-                dispatcher_send(self.hass, UPDATE_SIGNAL)
-
-    def on_robot_stimulation(self, robot, event_type, event):
-        """Handle robot_state events."""
-        # emotion_events: "PettingStarted"
-        # emotion_events: "PettingBlissLevelIncrease"
-        # emotion_events: "ReactToSoundAwake"
-
-        if not event.emotion_events:
-            return
-        myevent = event.emotion_events
-        _LOGGER.debug(event)
-        _LOGGER.debug(myevent)
-        if not myevent[0] in STIMULATIONS_TO_IGNORE:
-            self.states.update({STATE_STIMULATION: str(myevent[0]).lower()})
-
-        if myevent == ["PettingStarted"]:
-            _LOGGER.debug("Petting started")
-            # data = {ATTR_MESSAGE: "Oh so good!", ATTR_USE_VECTOR_VOICE: True}
-            # self.hass.services.call(
-            #     DOMAIN,
-            #     SERVICE_SPEAK,
-            #     ServiceCall(
-            #         DOMAIN,
-            #         SERVICE_SPEAK,
-            #         data=data,
-            #     ),
-            # )
-            if not self.robot.conn._has_control:
-                self.robot.conn.request_control()
-            self.robot.behavior.say_text(
-                text="Oh so good!",
-            )
-            self.robot.conn.release_control(timeout=1.0)
-        # elif myevent == ["PettingBlissLevelIncrease"]:
-        #     _LOGGER.debug("Still being petted")
-        #     self.robot.conn.request_control()
-        #     self.robot.behavior.say_text(
-        #         text="Oh yes - right there!",
-        #     )
-        #     self.robot.conn.release_control(timeout=1.0)
-
-        dispatcher_send(self.hass, UPDATE_SIGNAL)
-
-    def on_robot_wake_word(self, robot, event_type, event):
-        """React to wake word."""
-        _LOGGER.debug(
-            "Received the wake word for event %s of event_type %s", event, event_type
-        )
-        if event == "wake_word_begin":
-            robot.conn.request_control()
-            robot.behavior.say_text(
-                text="You called!",
-            )
-            robot.conn.release_control()
 
     async def _async_update_data(self) -> datetime | None:
         """Update Vector data."""
@@ -324,7 +404,7 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
                         STATE_CUBE_FACTORY_ID: cube_battery.factory_id,
                         STATE_CUBE_LAST_CONTACT: (
                             datetime.utcnow()
-                            + timedelta(
+                            - timedelta(
                                 seconds=int(cube_battery.time_since_last_reading_sec)
                             )
                         ).astimezone(pytz.UTC),

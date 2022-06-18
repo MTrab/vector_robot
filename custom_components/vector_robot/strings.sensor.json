@@ -25,7 +25,8 @@
             "keepaway": "Arms up",
             "findhome": "Looking for charger",
             "exploring": "Exploring the world",
-            "reacttohand": "Reacting to a hand"
+            "reacttohand": "Reacting to a hand",
+            "reacttohello": "Reacting to trigger word"
         },
         "vector_robot__stimuli": {
             "reacttosoundawake": "Heard something",
@@ -39,7 +40,11 @@
             "dancetothebeat": "Dancing to the beat",
             "keepawaystarted": "Keepaway action",
             "exploringexamineobstacle": "Examining obstacle",
-            "cliffreact": "Found a cliff"
+            "cliffreact": "Found a cliff",
+            "eyecontactreaction": "Got eye contact with a person",
+            "reacttotriggerword": "Reacting to trigger word",
+            "respondtoshortvoicecommand": "Responding to short voice command",
+            "placedoncharger": "Placed on charger"
         }
     }
 }

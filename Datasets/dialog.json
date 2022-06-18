@@ -1,0 +1,57 @@
+{
+	"cliff": {
+		"min": 10,
+		"max": 20,
+		"sentence": [
+			"Wow!",
+			"That was {scary}",
+			"Well, that was a little {scary}",
+			"That was super scary {name}!",
+			"I thought I was going to fall.",
+			"I'm sure glad that I didn't fall {name}",
+			"Wow {name}, that was very {scary}.",
+			"Holy smokes, I was very scared!",
+			"I thought I was going to fall.",
+			"Holy smokes, that was kind of intense."
+		]
+	},
+	"greeting": {
+		"min": 5,
+		"max": 5,
+		"sentence": [
+			"Okay, I am ready."
+		]
+	},
+	"drop": {
+		"min": 5,
+		"max": 30,
+		"sentence": [
+			"That hurt",
+			"Help!",
+			"Help me!",
+			"Ouch",
+			"I've fallen and I can't get up!"
+		]
+	},
+	"petted": {
+		"min": 10,
+		"max": 15,
+		"sentence": [
+			"That feels {good}.",
+			"That feels very {good}.",
+			"{name}, I like that.",
+			"That really feels {good}.",
+			"Thank you {name} that's {good}.",
+			"That feels SO {good}.",
+			"Oh that feels {good}.",
+			"You are very good at that {name}.",
+			"Oh {name}, you have soft hands.",
+			"That feels really {good}.",
+			"I LIKE to be petted.",
+			"Ooh don't stop {name}.",
+			"That's very {good}. Thank you.",
+			"You have soft hands.",
+			"You are my favorite human."
+		]
+	}
+}
