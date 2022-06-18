@@ -10,7 +10,7 @@ import grpc
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 
-from anki_vector import messaging
+from .anki_vector import messaging
 from .const import ANKI_APP_KEY, API_URL, TOKEN_URL, USER_AGENT
 
 _LOGGER = logging.getLogger(__name__)
@@ -179,7 +179,7 @@ class API:
     async def async_write_config(self, clear: bool = True):
         """Write config to sdk_config.ini."""
         home = Path.home()
-        config_file = str(home / ".anki_vector" / "sdk_config.ini")
+        config_file = str(home / "..anki_vector" / "sdk_config.ini")
 
         config = configparser.ConfigParser(strict=False)
 

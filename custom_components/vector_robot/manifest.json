@@ -5,7 +5,13 @@
   "domain": "vector_robot",
   "iot_class": "cloud_polling",
   "requirements": [
-    "git+https://github.com/MTrab/pyHAVector.git@master#pyHAVector==0.7.3"
+    "aiogrpc>=1.4",
+    "cryptography",
+    "flask",
+    "googleapis-common-protos",
+    "numpy>=1.11",
+    "Pillow>=3.3",
+    "requests"
   ],
   "after_dependencies": [],
   "codeowners": [

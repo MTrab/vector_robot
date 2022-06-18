@@ -32,7 +32,7 @@ async def validate_input(hass: HomeAssistant, data: dict) -> bool:
     Data has the keys from DATA_SCHEMA with values provided by the user.
     """
     home = Path.home()
-    settings_dir = home / ".anki_vector"
+    settings_dir = home / "..anki_vector"
     vector_api = API(
         data[CONF_EMAIL],
         data[CONF_PASSWORD],
@@ -53,7 +53,7 @@ async def validate_input(hass: HomeAssistant, data: dict) -> bool:
 
     await vector_api.async_user_authentication()
 
-    # Store credentials in the .anki_vector directory's sdk_config.ini file
+    # Store credentials in the ..anki_vector directory's sdk_config.ini file
     await vector_api.async_write_config()
 
     return True

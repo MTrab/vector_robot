@@ -1,8 +1,7 @@
 """Vector robot sensors."""
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import IntEnum
-from functools import partial
 
 import logging
 from typing import Any, Mapping
@@ -11,11 +10,11 @@ from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
+    ENTITY_ID_FORMAT,
 )
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
-from homeassistant.const import EVENT_HOMEASSISTANT_START
+from homeassistant.const import EVENT_HOMEASSISTANT_START, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import entity_platform
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later
@@ -24,27 +23,95 @@ from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from .base import VectorBase
 from .const import (
     DOMAIN,
-    SERVICE_GOTO_CHARGER,
-    SERVICE_LEAVE_CHARGER,
-    SERVICE_SPEAK,
-    UPDATE_BATTERY,
+    ICON_CUBE,
+    ICON_ROBOT,
+    LANG_BATTERY,
+    LANG_STATE,
+    STATE_CUBE_BATTERY_LEVEL,
+    STATE_CUBE_BATTERY_VOLTS,
+    STATE_CUBE_FACTORY_ID,
+    STATE_CUBE_LAST_CONTACT,
+    STATE_FIRMWARE_VERSION,
+    STATE_ROBOT_BATTERY_LEVEL,
+    STATE_ROBOT_BATTERY_VOLTS,
+    STATE_ROBOT_IS_CHARGNING,
+    STATE_ROBOT_IS_ON_CHARGER,
+    STATE_STIMULATION,
+    STATE_TIME_STAMPED,
+    UPDATE_SIGNAL,
+    VECTOR_ICON,
 )
-from .helpers import CubeBatteryMap, RobotBatteryMap, CubeBatteryInfo, RobotBatteryInfo
-from .schemes import TTS
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class VectorSensorType(IntEnum):
+    """Vector sensor types."""
+
+    BATTERY = 0
+    STATE = 1
+
+
+class VectorSensorFeature(IntEnum):
+    """Different battery sensor types."""
+
+    BATTERY_ROBOT = 0
+    BATTERY_CUBE = 1
+    STATUS = 2
 
 
 @dataclass
 class VectorSensorEntityDescription(SensorEntityDescription):
     """Describes a Vector sensor."""
 
+    state_attr: str | None = None
+    sensor_type: VectorSensorType = VectorSensorType.STATE
+    vector_attributes: dict | None = field(default_factory=dict)
+    translate_key: str | None = None
 
-class VectorBatterySensorFeature(IntEnum):
-    """Different battery sensor types."""
 
-    ROBOT = 0
-    CUBE = 1
+SENSORS = [
+    VectorSensorEntityDescription(
+        key=VectorSensorFeature.BATTERY_ROBOT,
+        name="Battery Level",
+        device_class=SensorDeviceClass.BATTERY,
+        icon=VECTOR_ICON[ICON_ROBOT],
+        state_attr=STATE_ROBOT_BATTERY_LEVEL,
+        sensor_type=VectorSensorType.BATTERY,
+        translate_key=LANG_BATTERY,
+        vector_attributes={
+            STATE_ROBOT_BATTERY_VOLTS: "voltage",
+            STATE_ROBOT_IS_CHARGNING: "charging",
+            STATE_ROBOT_IS_ON_CHARGER: "on_charger",
+        },
+    ),
+    VectorSensorEntityDescription(
+        key=VectorSensorFeature.BATTERY_CUBE,
+        name="Cube battery Level",
+        device_class=SensorDeviceClass.BATTERY,
+        icon=VECTOR_ICON[ICON_CUBE],
+        state_attr=STATE_CUBE_BATTERY_LEVEL,
+        sensor_type=VectorSensorType.BATTERY,
+        translate_key=LANG_BATTERY,
+        vector_attributes={
+            STATE_CUBE_BATTERY_VOLTS: "voltage",
+            STATE_CUBE_FACTORY_ID: "mac_address",
+            STATE_CUBE_LAST_CONTACT: "last_contact",
+        },
+    ),
+    VectorSensorEntityDescription(
+        key=VectorSensorFeature.STATUS,
+        name="Status",
+        icon=VECTOR_ICON[ICON_ROBOT],
+        state_attr=STATE_TIME_STAMPED,
+        sensor_type=VectorSensorType.STATE,
+        translate_key=LANG_STATE,
+        vector_attributes={
+            STATE_FIRMWARE_VERSION: "firmware_version",
+            STATE_STIMULATION: "last_stimulation",
+        },
+    ),
+]
 
 
 class VectorBaseSensorEntity(VectorBase):
@@ -52,22 +119,75 @@ class VectorBaseSensorEntity(VectorBase):
 
     entity_description: VectorSensorEntityDescription
 
-    def __init__(self, coordinator):
+    def __init__(self, coordinator, description: VectorSensorEntityDescription):
         """Initialize a base sensor."""
         super().__init__(coordinator)
 
-        platform = entity_platform.async_get_current_platform()
-        platform.async_register_entity_service(
-            SERVICE_SPEAK,
-            TTS,
-            partial(self.async_tts),
+        self.coordinator = coordinator
+        self.entity_description = description
+
+        self._attr_unique_id = f"{self.coordinator.name}_{self.entity_description.name}"
+        self.entity_id = ENTITY_ID_FORMAT.format(
+            f"{coordinator.name} {description.name}"
         )
-        platform.async_register_entity_service(
-            SERVICE_LEAVE_CHARGER, {}, self.async_drive_off_charger
+        self._attr_icon = description.icon
+
+        self._attributes = {}
+        self._state = None
+
+    @property
+    def device_class(self) -> str:
+        """Return the ID of the capability, to identify the entity for translations."""
+        return f"{DOMAIN}__{self.entity_description.translate_key}"
+
+    @property
+    def extra_state_attributes(self) -> Mapping[str, Any] | None:
+        return self._attributes
+
+    @property
+    def native_value(self) -> str:
+        """Return the state of the sensor."""
+        return self._state
+
+    async def async_added_to_hass(self) -> None:
+        """Actions when added to Home Assistant."""
+        await super().async_added_to_hass()
+
+        # Listen for battery updates
+        async_dispatcher_connect(self.hass, UPDATE_SIGNAL, self.async_update_entity)
+
+    async def async_update_entity(self) -> None:
+        """Update the entity."""
+        _LOGGER.debug(self.coordinator.states)
+        self._state = (
+            self.coordinator.states[self.entity_description.state_attr]
+            if self.entity_description.state_attr in self.coordinator.states
+            else STATE_UNKNOWN
         )
 
-    # async def async_process_data(self) -> None:
-    #     """Process data from API."""
+        if hasattr(self.entity_description, "vector_attributes"):
+            states = self.coordinator.states
+
+            attributes = {}
+            for prop, attr in self.entity_description.vector_attributes.items():
+                if prop in states:
+                    prop_data = states[prop]
+                    if not isinstance(prop_data, type(None)):
+                        attributes[attr] = prop_data
+
+            self._attributes.update(attributes)
+
+        self.async_write_ha_state()
+
+
+class VectorStateSensorEntity(VectorBaseSensorEntity, SensorEntity):
+    """Defines a Vector state sensor."""
+
+    async def async_update_entity(self) -> None:
+        """Updates state when new data is available."""
+        _LOGGER.debug("Updating state sensors")
+
+        await super().async_update_entity()
 
 
 class VectorBatterySensorEntity(VectorBaseSensorEntity, SensorEntity):
@@ -75,96 +195,18 @@ class VectorBatterySensorEntity(VectorBaseSensorEntity, SensorEntity):
 
     _attr_device_class = SensorDeviceClass.BATTERY
 
-    def __init__(
-        self,
-        coordinator,
-        feature: VectorBatterySensorFeature = VectorBatterySensorFeature.ROBOT,
-    ):
-        """Init the sensor."""
-        super().__init__(coordinator)
-        self.feature = feature
-        self.coordinator = coordinator
-
-        self._attributes = {}
-        self._state = None
-
-        if self.feature == VectorBatterySensorFeature.CUBE:
-            # Cube battery sensor
-            self._attr_name = f"{self.coordinator.name} Cube Battery Level"
-            self._attr_unique_id = f"{self.coordinator.name}_cube_batterylevel"
-            self._attr_icon = "mdi:cube"
-        elif self.feature == VectorBatterySensorFeature.ROBOT:
-            # Robot battery sensor
-            self._attr_name = f"{self.coordinator.name} Battery Level"
-            self._attr_unique_id = f"{self.coordinator.name}_batterylevel"
-
-    async def async_update_battery(self):
+    async def async_update_entity(self):
         """Updates battery state when received."""
+        _LOGGER.debug("Updating battery sensors")
 
-        if self.feature == VectorBatterySensorFeature.CUBE:
-            battery: CubeBatteryInfo = self.coordinator.cube_battery
-            self._state = battery.level
-            self._attributes = {
-                "voltage": round(battery.voltage, 2),
-                "last_reading": battery.last_reading,
-                "factory_id": battery.factory_id,
-            }
-
-        if self.feature == VectorBatterySensorFeature.ROBOT:
-            battery: RobotBatteryInfo = self.coordinator.robot_battery
-            self._state = battery.level
-            self._attributes = {
-                "voltage": round(battery.voltage, 2),
-                "charging": battery.is_charging,
-                "on_charger": battery.on_charger,
-            }
-
-        self.async_write_ha_state()
-
-    async def async_added_to_hass(self) -> None:
-        """Connect to dispatchers when HASS is loaded."""
-        await super().async_added_to_hass()
-
-        if self.feature == VectorBatterySensorFeature.CUBE:
-            # Cube battery sensor
-            battery: CubeBatteryInfo = self.coordinator.cube_battery
-        elif self.feature == VectorBatterySensorFeature.ROBOT:
-            # Robot battery sensor
-            battery: RobotBatteryInfo = self.coordinator.robot_battery
-            self._state = battery.level
-            if isinstance(battery.voltage, type(None)):
-                self._attributes = {
-                    "level": None,
-                    "voltage": None,
-                    "charging": None,
-                    "on_charger": None,
-                }
-            else:
-                self._attributes = {
-                    "level": battery.level,
-                    "voltage": round(float(battery.voltage), 2),
-                    "charging": battery.is_charging,
-                    "on_charger": battery.on_charger,
-                }
-
-        # Listen for battery updates
-        async_dispatcher_connect(self.hass, UPDATE_BATTERY, self.async_update_battery)
-
-    @property
-    def extra_state_attributes(self) -> Mapping[str, Any] | None:
-        return self._attributes
-
-    @property
-    def native_value(self) -> RobotBatteryMap | CubeBatteryMap:
-        """Return the state of the sensor."""
-        return self._state
+        await super().async_update_entity()
 
 
 async def async_setup_platform(
     hass: HomeAssistant,
     config: ConfigType,
-    async_add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None,
+    async_add_entities: AddEntitiesCallback,  # pylint: disable=unused-argument
+    discovery_info: DiscoveryInfoType | None = None,  # pylint: disable=unused-argument
 ) -> None:
     """Set up a Vector sensor."""
 
@@ -191,8 +233,13 @@ async def async_setup_entry(
     """Add Vector sensor entries."""
     coordinator = hass.data[DOMAIN][config.entry_id]["coordinator"]
 
-    sensors = [
-        VectorBatterySensorEntity(coordinator, VectorBatterySensorFeature.ROBOT),
-    ]
+    entities = []
+    for sensor in SENSORS:
+        if sensor.sensor_type == VectorSensorType.BATTERY:
+            constructor = VectorBatterySensorEntity(coordinator, sensor)
+        elif sensor.sensor_type == VectorSensorType.STATE:
+            constructor = VectorStateSensorEntity(coordinator, sensor)
 
-    async_add_entities(sensors, True)
+        entities.append(constructor)
+
+    async_add_entities(entities, True)

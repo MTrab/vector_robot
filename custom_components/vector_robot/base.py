@@ -4,20 +4,16 @@ from datetime import timedelta
 from functools import partial
 
 import logging
-from typing import Any
-import anki_vector
 
-from homeassistant.core import ServiceCall
-from homeassistant.helpers.entity import Entity
+from homeassistant.const import STATE_UNKNOWN
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from anki_vector.events import Events
-from anki_vector.exceptions import VectorTimeoutException, VectorAsyncException
+from .anki_vector.exceptions import VectorTimeoutException, VectorAsyncException
 
 from . import VectorDataUpdateCoordinator, VectorConnectionState
 
-from .const import ATTR_MESSAGE, DOMAIN, ATTR_USE_VECTOR_VOICE
+from .const import DOMAIN, STATE_FIRMWARE_VERSION
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,10 +25,6 @@ def connect(self) -> bool:
         self.connection_state = VectorConnectionState.CONNECTING
         self.robot.connect()
         self.connection_state = VectorConnectionState.CONNECTED
-
-        # Event subscriptions
-        # on_robot_state = partial(self.api.event_robot_state, self.robot)
-        # self.robot.events.subscribe(on_robot_state, Events.robot_state)
 
         return True
     except VectorAsyncException:
@@ -55,6 +47,8 @@ class VectorBase(CoordinatorEntity):
         """Initialise a Vector base."""
         super().__init__(coordinator)
         self.api: VectorDataUpdateCoordinator = coordinator
+        self._generation = "1.0" if self.api.serial.startswith("00") else "2.0"
+        self._vendor = "Anki" if self._generation == "1.0" else "Digital Dream Labs"
 
     @property
     def device_info(self):
@@ -63,46 +57,15 @@ class VectorBase(CoordinatorEntity):
         return {
             "identifiers": {(DOMAIN, self.api.entry_id, self.api.friendly_name)},
             "name": str(self.api.friendly_name),
-            "manufacturer": "Digital Dream Labs / Anki",
+            "manufacturer": self._vendor,
             "model": "Vector",
-            "sw_version": self.api.firmware_version,
+            "sw_version": self.api.states[STATE_FIRMWARE_VERSION]
+            if STATE_FIRMWARE_VERSION in self.api.states
+            else STATE_UNKNOWN,
+            "hw_version": self._generation,
         }
 
     async def async_added_to_hass(self) -> None:
         """When entity is added to hass."""
         await super().async_added_to_hass()
         self.api.is_added = True
-
-    async def async_drive_on_charger(
-        self, entity: Entity, service_call: ServiceCall
-    ) -> None:
-        """Send Vector to the charger."""
-        with anki_vector.Robot(
-            self.api.serial,
-            cache_animation_lists=False,
-            default_logging=False,
-        ) as robot:
-            robot.behavior.drive_on_charger
-
-    async def async_drive_off_charger(
-        self, entity: Entity, service_call: ServiceCall
-    ) -> None:
-        """Send Vector to the charger."""
-        with anki_vector.Robot(
-            self.api.serial,
-            cache_animation_lists=False,
-            default_logging=False,
-        ) as robot:
-            robot.behavior.drive_off_charger
-
-    async def async_tts(self, entity: Entity, service_call: ServiceCall) -> None:
-        """Make Vector speak."""
-        with anki_vector.Robot(
-            self.api.serial,
-            cache_animation_lists=False,
-            default_logging=False,
-        ) as robot:
-            robot.behavior.say_text(
-                text=service_call.data[ATTR_MESSAGE],
-                use_vector_voice=service_call.data[ATTR_USE_VECTOR_VOICE],
-            )
