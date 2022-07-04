@@ -9,7 +9,7 @@ from homeassistant.const import STATE_UNKNOWN
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .anki_vector.exceptions import VectorTimeoutException, VectorAsyncException
+from ha_vector.exceptions import VectorTimeoutException, VectorAsyncException
 
 from . import VectorDataUpdateCoordinator, VectorConnectionState
 

@@ -5,18 +5,16 @@
   "domain": "vector_robot",
   "iot_class": "cloud_polling",
   "requirements": [
-    "aiogrpc>=1.4",
-    "cryptography",
-    "flask",
-    "googleapis-common-protos",
-    "numpy>=1.11",
-    "Pillow>=3.3",
-    "requests",
-    "grpclib>=0.4.2"
+    "git+https://github.com/mtrab/ha_vector@v1-dev#ha_vector==1.0.0"
   ],
-  "after_dependencies": [],
+  "after_dependencies": [
+    "http"
+  ],
   "codeowners": [
     "@MTrab"
+  ],
+  "loggers": [
+    "ha_vector"
   ],
   "dhcp": [
     {

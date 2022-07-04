@@ -1,5 +1,6 @@
 """Base definition of DDL Vector."""
 from __future__ import annotations
+
 from datetime import datetime, timedelta
 from enum import IntEnum
 from functools import partial
@@ -25,10 +26,10 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.loader import async_get_integration
 import pytz
 
-from .anki_vector import Robot
-from .anki_vector.events import Events
-from .anki_vector.exceptions import VectorConnectionException
-from .anki_vector.user_intent import UserIntent, UserIntentEvent
+from ha_vector.robot import Robot
+from ha_vector.events import Events
+from ha_vector.exceptions import VectorConnectionException
+from ha_vector.user_intent import UserIntent, UserIntentEvent
 
 
 from .const import (

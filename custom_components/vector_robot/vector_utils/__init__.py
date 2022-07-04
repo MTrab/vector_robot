@@ -1,5 +1,6 @@
 """Vector utils used to fetch sentence data for Vector random speeches."""
 from __future__ import annotations
+
 from dataclasses import dataclass
 
 from datetime import datetime
@@ -12,7 +13,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from ..anki_vector import audio
+from ha_vector import audio
 
 from .const import BASE_URL, DATASETS, VectorDatasets
 from .exceptions import VectorDatasetException
