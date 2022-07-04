@@ -2,8 +2,8 @@
 from __future__ import annotations
 from enum import IntEnum
 
-BASE_URL = "https://vector.trab.dk/dataset/{}"
-
+# BASE_URL = "https://vector.trab.dk/dataset/{}"
+BASE_URL = "https://raw.githubusercontent.com/MTrab/vector_robot/dev/Datasets/{}"
 
 class VectorDatasets(IntEnum):
     """Vector dataset enum."""

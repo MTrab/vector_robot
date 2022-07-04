@@ -9,6 +9,7 @@ from pathlib import Path
 import grpc
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
+import grpclib
 
 from .anki_vector import messaging
 from .const import ANKI_APP_KEY, API_URL, TOKEN_URL, USER_AGENT
@@ -121,6 +122,11 @@ class API:
         res = await self._client.post(
             self._handler.url, data=payload, headers=self._handler.headers
         )
+        print(self._handler.url)
+        print(self._handler.headers)
+        print(payload)
+        print(res.status)
+        print(res)
         if res.status != 200:
             raise Exception("Error fetching session token.")
 
@@ -159,6 +165,7 @@ class API:
                 user_session_id=self._token["session"]["session_token"].encode("utf-8"),
                 client_name=socket.gethostname().encode("utf-8"),
             )
+            print(request)
             response = interface.UserAuthentication(request)
             if (
                 response.code
@@ -174,6 +181,7 @@ class API:
             ) from err
 
         self._guid = response.client_token_guid
+        print(self._guid)
         return self._guid
 
     async def async_write_config(self, clear: bool = True):

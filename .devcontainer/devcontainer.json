@@ -4,7 +4,7 @@
 	"name": "Digital Dream Labs Vector custom component development",
 	"context": "..",
 	"appPort": [
-		"9123:8123"
+		"9125:8123"
 	],
 	"postCreateCommand": "container install",
 	"extensions": [

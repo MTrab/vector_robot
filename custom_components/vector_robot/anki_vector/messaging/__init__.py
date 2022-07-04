@@ -42,4 +42,4 @@ For information about individual messages and their parameters, see :doc:`the pr
 from . import protocol
 from . import client
 
-__all__ = ['protocol', 'client']
+__all__ = ["protocol", "client"]
