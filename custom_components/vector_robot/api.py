@@ -10,7 +10,7 @@ import grpc
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 
-from ha_vector.messaging import *
+from ha_vector import messaging
 from .const import ANKI_APP_KEY, API_URL, TOKEN_URL, USER_AGENT
 
 _LOGGER = logging.getLogger(__name__)
@@ -80,7 +80,16 @@ class API:
         """Return handler."""
         return self._handler
 
-    async def async_get_cert(self) -> bytes:
+    async def async_configure(self) -> None:
+        """Do the required SDK configuration steps."""
+        await self._async_get_cert()
+        await self._async_save_cert()
+        await self._async_validate_cert_name()
+        await self._async_get_session_token()
+        await self._async_user_authentication()
+        await self._async_write_config()
+
+    async def _async_get_cert(self) -> bytes:
         """Get Vector certificate."""
         res = await self._client.get(f"{TOKEN_URL}{self._serial}")
         if res.status != 200:
@@ -89,7 +98,7 @@ class API:
         self._cert = await res.read()
         return self._cert
 
-    async def async_save_cert(self) -> str:
+    async def _async_save_cert(self) -> str:
         """Write Vector's certificate to a file located in the user's home directory"""
         os.makedirs(str(self._settings_dir), exist_ok=True)
         self._cert_file = str(self._settings_dir / f"{self._name}-{self._serial}.cert")
@@ -99,7 +108,7 @@ class API:
             file.write(self._cert)
         return self._cert_file
 
-    async def async_validate_cert_name(self):
+    async def _async_validate_cert_name(self):
         """Validate the name on Vector's certificate against the user-provided name"""
         with open(self._cert_file, "rb") as file:
             cert_file = file.read()
@@ -110,11 +119,12 @@ class API:
                     common_name = fields.value
                     if common_name != self._name:
                         raise Exception(
-                            f"The name of the certificate ({common_name}) does not match the name provided ({self._name}).\n"
+                            f"The name of the certificate ({common_name}) does "
+                            "not match the name provided ({self._name}).\n"
                             "Please verify the name, and try again."
                         )
 
-    async def async_get_session_token(self) -> str:
+    async def _async_get_session_token(self) -> str:
         """Get Vector session token."""
         payload = {"username": self._email, "password": self._password}
 
@@ -132,7 +142,7 @@ class API:
         self._token = await res.json(content_type="text/json")
         return self._token
 
-    async def async_user_authentication(self) -> str:
+    async def _async_user_authentication(self) -> str:
         """Authenticate against the API."""
         # Pin the robot certificate for opening the channel
         creds = grpc.ssl_channel_credentials(root_certificates=self._cert)
@@ -155,7 +165,8 @@ class API:
         except grpc.FutureTimeoutError as err:
             raise Exception(
                 "\nUnable to connect to Vector\n"
-                "Please be sure to connect via the Vector companion app first, and connect your computer to the same network as your Vector."
+                "Please be sure to connect via the Vector companion app first, "
+                "and connect your computer to the same network as your Vector."
             ) from err
 
         try:
@@ -183,7 +194,7 @@ class API:
         print(self._guid)
         return self._guid
 
-    async def async_write_config(self, clear: bool = True):
+    async def _async_write_config(self, clear: bool = True):
         """Write config to sdk_config.ini."""
         home = Path.home()
         config_file = str(home / "..anki_vector" / "sdk_config.ini")

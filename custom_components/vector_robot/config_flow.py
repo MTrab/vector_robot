@@ -42,19 +42,8 @@ async def validate_input(hass: HomeAssistant, data: dict) -> bool:
         settings_dir,
         async_get_clientsession(hass),
     )
-    await vector_api.async_get_cert()
 
-    await vector_api.async_save_cert()
-    await vector_api.async_validate_cert_name()
-
-    token = await vector_api.async_get_session_token()
-    if not token.get("session"):
-        raise Exception("Session error: {token}")
-
-    await vector_api.async_user_authentication()
-
-    # Store credentials in the ..anki_vector directory's sdk_config.ini file
-    await vector_api.async_write_config()
+    await vector_api.async_configure()
 
     return True
 
