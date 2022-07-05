@@ -12,7 +12,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 
 from .const import CONF_IP, DOMAIN, CONF_SERIAL
-from .api import API
+from ha_vector.home_assistant import API
 
 _LOGGER = logging.getLogger(__name__)
 
