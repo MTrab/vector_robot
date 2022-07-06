@@ -203,6 +203,8 @@ class Connection:
         self.active_commands = []
         self._logger = logger
 
+        self._logger.debug("%s %s %s", name, host, cert_file)
+
     @property
     def loop(self) -> AbstractEventLoop:
         """Returns the loop running inside the connection thread."""
@@ -282,10 +284,10 @@ class Connection:
             self._has_control = await asyncio.wait_for(
                 self.control_granted_event.wait(), timeout
             )
-        except futures.TimeoutError as e:
+        except futures.TimeoutError as exc:
             raise VectorControlTimeoutException(
                 f"Surpassed timeout of {timeout}s"
-            ) from e
+            ) from exc
 
     def release_control(self, timeout: float = 10.0):
         """Explicitly release control. Typically used after detecting `control_lost_event`."""
@@ -300,10 +302,10 @@ class Connection:
             self._has_control = await asyncio.wait_for(
                 self.control_lost_event.wait(), timeout
             )
-        except futures.TimeoutError as e:
+        except futures.TimeoutError as exc:
             raise VectorControlTimeoutException(
                 f"Surpassed timeout of {timeout}s"
-            ) from e
+            ) from exc
 
     def connect(self, timeout: float = 10.0) -> None:
         """Connect to Vector. This will start the connection thread which handles all messages
@@ -337,7 +339,6 @@ class Connection:
             delattr(self._ready_signal, "exception")
             raise e
         self._logger.debug("_on_connected was handled")
-
 
     def _connect(self, timeout: float, callback=lambda: None) -> None:
         """The function that runs on the connection thread. This will connect to Vector,
@@ -403,14 +404,13 @@ class Connection:
             # Verify the connection to Vector is able to be established (client-side)
             try:
                 # Explicitly grab _channel._channel to test the underlying grpc channel directly
-                grpc.channel_ready_future(self._channel._channel).result(
-                    timeout=timeout
-                )  # pylint: disable=protected-access
-            except grpc.FutureTimeoutError as e:
-                raise VectorNotFoundException() from e
+                grpc.channel_ready_future(
+                    self._channel._channel  # pylint: disable=protected-access
+                ).result(timeout=timeout)
+            except grpc.FutureTimeoutError as exc:
+                raise VectorNotFoundException() from exc
 
             self._interface = client.ExternalInterfaceStub(self._channel)
-
             # Verify Vector and the SDK have compatible protocol versions
             version = protocol.ProtocolVersionRequest(
                 client_version=protocol.PROTOCOL_VERSION_CURRENT,
@@ -460,6 +460,8 @@ class Connection:
             self._loop.close()
             return
         finally:
+            self._logger.debug("Went into finally block")
+
             self._ready_signal.set()
             callback()
 
