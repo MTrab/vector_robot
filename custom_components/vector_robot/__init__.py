@@ -1,36 +1,24 @@
 """Base definition of DDL Vector."""
 from __future__ import annotations
 
+import logging
+import random
 from datetime import datetime, timedelta
 from enum import IntEnum
 from functools import partial
+from typing import Optional, cast
 
-# Vector-A6S1
-# 00908e7e
-# 192.168.1.223
-
-import logging
-import random
-from typing import Optional
-
+import pytz
+from ha_vector.events import Events
+from ha_vector.exceptions import VectorConnectionException
+from .api_override.home_assistant import Robot
+from ha_vector.user_intent import UserIntent, UserIntentEvent
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    CONF_EMAIL,
-    CONF_NAME,
-    CONF_PASSWORD,
-    STATE_UNKNOWN,
-)
+from homeassistant.const import CONF_EMAIL, CONF_NAME, CONF_PASSWORD, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers.dispatcher import dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.loader import async_get_integration
-import pytz
-
-from ha_vector.robot import Robot
-from ha_vector.events import Events
-from ha_vector.exceptions import VectorConnectionException
-from ha_vector.user_intent import UserIntent, UserIntentEvent
-
 
 from .const import (
     ATTR_MESSAGE,
@@ -63,15 +51,16 @@ from .const import (
     STATE_TIME_STAMPED,
     UPDATE_SIGNAL,
 )
-
-from .states import (
-    FEATURES_TO_IGNORE,
-    STIMULATIONS_TO_IGNORE,
-    VectorStates,
-)
+from .helpers.storage import VectorStore
 from .schemes import TTS
+from .states import FEATURES_TO_IGNORE, STIMULATIONS_TO_IGNORE, VectorStates
 from .vector_utils import Chatter, DataRunner
 from .vector_utils.const import VectorDatasets
+
+# Vector-A6S1
+# 00908e7e
+# 192.168.1.223
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -91,11 +80,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": None,
         "listener": None,
     }
-
-    dataset = DataRunner(hass)
+    store = VectorStore(hass, entry.data[CONF_NAME])
+    config = cast(Optional[dict], await store.async_load())
+    dataset = DataRunner(hass, store.path)
     await dataset.async_refresh()
 
-    coordinator = VectorDataUpdateCoordinator(hass, entry)
+    coordinator = VectorDataUpdateCoordinator(hass, entry, config, dataset.path)
     hass.data[DOMAIN][entry.entry_id]["coordinator"] = coordinator
 
     await check_unique_id(hass, entry)
@@ -158,7 +148,9 @@ class VectorConnectionState(IntEnum):
 class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
     """Defines a Vector data update coordinator."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    def __init__(
+        self, hass: HomeAssistant, entry: ConfigEntry, config: dict, dataset_path: str
+    ) -> None:
         """Initialize the connection."""
         self.hass = hass
         self._config_data = entry.data
@@ -169,136 +161,26 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
         self.full_name = (
             f"{self._config_data[CONF_NAME]}_{self._config_data[CONF_SERIAL]}"
         )
+        self._config = config
+        self._dataset = dataset_path
+
         self.robot = Robot(
             self.serial,
             behavior_control_level=None,
-            default_logging=False,
             cache_animation_lists=False,
             enable_face_detection=True,
             estimate_facial_expression=True,
             enable_audio_feed=True,
-            # name=self._config_data[CONF_NAME],
+            name=self._config_data[CONF_NAME],
             ip=self._config_data[CONF_IP],
+            config=self._config,
+            loop=hass.loop,
         )
         self.states = VectorStates()
-        self.chatter = Chatter()
-        self.chatter.get_text(VectorDatasets.DIALOGS, "cliff")
+        # self.chatter = Chatter(self._dataset)
+        # self.chatter.get_text(VectorDatasets.DIALOGS, "cliff")
 
         self.robot.connect()
-
-        def on_robot_user_intent(robot, event_type, event):
-            """React to user intents."""
-            _LOGGER.debug(event)
-            user_intent = UserIntent(event)
-            _LOGGER.debug("Received %s", user_intent.intent_event)
-            _LOGGER.debug(user_intent.intent_data)
-            if user_intent.intent_event is UserIntentEvent.greeting_hello:
-                Str = random.randint(1, 3)
-                if not robot.conn._has_control:
-                    robot.conn.request_control()
-
-                if Str == 1:
-                    robot.behavior.say_text("Stop disturbing me. I'm busy")
-                if Str == 2:
-                    robot.behavior.say_text("You again. You're always here")
-                if Str == 3:
-                    robot.behavior.say_text("Can I please have 2 minutes peace?")
-                robot.conn.release_control()
-
-        def on_event(robot, event_type, event):
-            """Used for testing events."""
-            _LOGGER.info("Event type: %s\nEvent: %s", event_type, event)
-
-        def on_robot_state(robot, event_type, event):
-            """Extract data from robot state."""
-            self.states.update(
-                {
-                    STATE_CARRYING_OBJECT: event.carrying_object_id
-                    if event.carrying_object_id != -1
-                    else None,
-                    STATE_CARRYING_OBJECT_ON_TOP: event.carrying_object_on_top_id
-                    if event.carrying_object_on_top_id != -1
-                    else None,
-                    STATE_HEAD_TRACKING_ID: event.head_tracking_object_id
-                    if event.head_tracking_object_id != -1
-                    else None,
-                }
-            )
-
-            if hasattr(event.prox_data, "lift_in_fov"):
-                self.states.update(
-                    {
-                        STATE_LIFT_IN_FOV: bool(event.prox_data.lift_in_fov),
-                    }
-                )
-            else:
-                self.states.update(
-                    {
-                        STATE_LIFT_IN_FOV: False,
-                    }
-                )
-
-            if hasattr(event.prox_data, "found_object"):
-                self.states.update(
-                    {
-                        STATE_FOUND_OBJECT: bool(event.prox_data.found_object),
-                    }
-                )
-            else:
-                self.states.update(
-                    {
-                        STATE_FOUND_OBJECT: False,
-                    }
-                )
-
-        def on_robot_time_stamped_status(robot, event_type, event):
-            """Handle time stamped events."""
-            if event.status.feature_status.feature_name:
-                if not event.status.feature_status.feature_name in FEATURES_TO_IGNORE:
-                    feature = event.status.feature_status.feature_name
-                    self.states.update({STATE_TIME_STAMPED: str(feature).lower()})
-
-                    dispatcher_send(self.hass, UPDATE_SIGNAL)
-
-        def on_robot_stimulation(robot, event_type, event):
-            """Handle robot_state events."""
-            # emotion_events: "PettingStarted"
-            # emotion_events: "PettingBlissLevelIncrease"
-            # emotion_events: "ReactToSoundAwake"
-
-            if not event.emotion_events:
-                return
-            myevent = event.emotion_events
-            if not myevent[0] in STIMULATIONS_TO_IGNORE:
-                self.states.update({STATE_STIMULATION: str(myevent[0]).lower()})
-
-            if myevent == ["PettingStarted"]:
-                _LOGGER.debug("Petting started")
-                # data = {ATTR_MESSAGE: "Oh so good!", ATTR_USE_VECTOR_VOICE: True}
-                # self.hass.services.call(
-                #     DOMAIN,
-                #     SERVICE_SPEAK,
-                #     ServiceCall(
-                #         DOMAIN,
-                #         SERVICE_SPEAK,
-                #         data=data,
-                #     ),
-                # )
-                if not robot.conn._has_control:
-                    robot.conn.request_control()
-                robot.behavior.say_text(
-                    text="Oh so good!",
-                )
-                robot.conn.release_control(timeout=1.0)
-            # elif myevent == ["PettingBlissLevelIncrease"]:
-            #     _LOGGER.debug("Still being petted")
-            #     self.robot.conn.request_control()
-            #     self.robot.behavior.say_text(
-            #         text="Oh yes - right there!",
-            #     )
-            #     self.robot.conn.release_control(timeout=1.0)
-
-            dispatcher_send(self.hass, UPDATE_SIGNAL)
 
         def on_robot_wake_word(robot, event_type, event):
             """React to wake word."""
@@ -311,21 +193,7 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
                 robot.conn.release_control()
 
         ### Subscribe to events
-        # Handle user intents
-        self.robot.events.subscribe(on_robot_user_intent, Events.user_intent)
-        # Handle stimulations
-        self.robot.events.subscribe(on_robot_stimulation, Events.stimulation_info)
-        # Handle wake words
         self.robot.events.subscribe(on_robot_wake_word, Events.wake_word)
-        # Handle time stamped events
-        self.robot.events.subscribe(
-            on_robot_time_stamped_status, Events.time_stamped_status
-        )
-        # Extract information from robot state events
-        self.robot.events.subscribe(on_robot_state, Events.robot_state)
-
-        # self.robot.events.subscribe(self.on_event, Events.robot_observed_object)
-        # self.robot.events.subscribe(self.on_event, Events.robot_observed_face)
 
         ### Register services
         # TTS / Speak
@@ -346,39 +214,41 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
     async def async_drive_on_charger(self, _) -> None:
         """Send Vector to the charger."""
         _LOGGER.debug("Asking Vector to go onto the charger")
-        self.robot.conn.request_control()
-        self.robot.behavior.drive_on_charger()
-        self.robot.conn.release_control(timeout=1.0)
+        await self.hass.async_add_executor_job(self.robot.conn.request_control)
+        await self.hass.async_add_executor_job(self.robot.behavior.drive_on_charger)
+        await self.hass.async_add_executor_job(self.robot.conn.release_control, 1.0)
 
     async def async_drive_off_charger(self, _) -> None:
         """Send Vector to the charger."""
         _LOGGER.debug("Asking Vector to leave the charger")
-        self.robot.conn.request_control()
-        self.robot.behavior.drive_off_charger()
-        self.robot.conn.release_control(timeout=1.0)
+        _LOGGER.debug("Awaiting control to be handed over.")
+        await self.hass.async_add_executor_job(self.robot.conn.request_control)
+        _LOGGER.debug("Got control - awaiting the action to be handled")
+        await self.hass.async_add_executor_job(self.robot.behavior.drive_off_charger)
+        _LOGGER.debug("Awaiting control to be released.")
+        await self.hass.async_add_executor_job(self.robot.conn.release_control, 1.0)
+        _LOGGER.debug("Control was handed over to Vector again.")
 
     async def async_tts(self, service_call: ServiceCall) -> None:
         """Make Vector speak."""
         _LOGGER.debug("Asking Vector to say a text")
         try:
-            self.robot.conn.request_control()
-            self.robot.behavior.say_text(
-                text=service_call.data[ATTR_MESSAGE],
-                use_vector_voice=service_call.data[ATTR_USE_VECTOR_VOICE],
+            await self.hass.async_add_executor_job(self.robot.conn.request_control)
+            await self.hass.async_add_executor_job(
+                self.robot.behavior.say_text,
+                service_call.data[ATTR_MESSAGE],
+                service_call.data[ATTR_USE_VECTOR_VOICE],
+                1.0,
             )
-            self.robot.conn.release_control(timeout=1.0)
+            await self.hass.async_add_executor_job(self.robot.conn.release_control, 1.0)
         except VectorConnectionException:
             _LOGGER.warning("Something happend while sending TTS to Vector :(")
 
     async def _async_update_data(self) -> datetime | None:
         """Update Vector data."""
 
-        battery_state = await self.hass.async_add_executor_job(
-            self.robot.get_battery_state
-        )
-        version_state = await self.hass.async_add_executor_job(
-            self.robot.get_version_state
-        )
+        battery_state = self.robot.get_battery_state().result()
+        version_state = self.robot.get_version_state().result()
 
         if battery_state:
             self.states.update(

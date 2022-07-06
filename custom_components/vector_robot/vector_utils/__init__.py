@@ -62,7 +62,7 @@ class Chatter:
 
     __datasets = {}
 
-    def __init__(self, dataset_path: str = "/config/.storage/vector"):
+    def __init__(self, dataset_path: str):
         """Initialize the chatter object."""
 
         for data in DATASETS.items():
@@ -106,13 +106,11 @@ class Chatter:
 class DataRunner:
     """Data runner class."""
 
-    def __init__(
-        self, hass: HomeAssistant, save_path: str = "/config/.storage/vector"
-    ) -> None:
+    def __init__(self, hass: HomeAssistant, save_path: str) -> None:
         """Initialize data runner object."""
         self.last_refresh: datetime = None
         self._client = async_get_clientsession(hass)
-        self._save_path = save_path
+        self._save_path = f"{save_path}-datasets"
 
     async def async_refresh(self) -> None:
         """Refresh all datasets."""
@@ -129,7 +127,7 @@ class DataRunner:
         if res.status != 200:
             raise VectorDatasetException(f"Error fetching dataset from {data_url}")
 
-        dataset = await res.json()
+        dataset = await res.json(content_type="text/plain")
         await self.__async_save_dataset(filename, dataset)
 
     async def __async_save_dataset(self, filename: str, dataset: Any) -> None:
@@ -140,3 +138,8 @@ class DataRunner:
             os.open(fullname, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666), "w"
         ) as file:
             json.dump(dataset, file)
+
+    @property
+    def path(self) -> str:
+        """Returns the path to the datasets."""
+        return self._save_path

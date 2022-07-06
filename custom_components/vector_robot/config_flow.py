@@ -2,17 +2,16 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-import voluptuous as vol
 
+import voluptuous as vol
+from .api_override.home_assistant import API
 from homeassistant import config_entries, exceptions
-from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, CONF_NAME
+from homeassistant.const import CONF_EMAIL, CONF_NAME, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-
-from .const import CONF_IP, DOMAIN, CONF_SERIAL
-from ha_vector.home_assistant import API
+from .const import CONF_CERTIFICATE, CONF_GUID, CONF_IP, CONF_SERIAL, DOMAIN
+from .helpers import VectorStore
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,19 +30,27 @@ async def validate_input(hass: HomeAssistant, data: dict) -> bool:
     """Validate the user input allows us to connect.
     Data has the keys from DATA_SCHEMA with values provided by the user.
     """
-    home = Path.home()
-    settings_dir = home / "..anki_vector"
+    store = VectorStore(hass, data[CONF_NAME])
+    await store.async_load()
     vector_api = API(
         data[CONF_EMAIL],
         data[CONF_PASSWORD],
         data[CONF_NAME],
         data[CONF_SERIAL],
         data[CONF_IP],
-        settings_dir,
+        store.cert_path,
         async_get_clientsession(hass),
     )
 
     await vector_api.async_configure()
+
+    config = {
+        CONF_CERTIFICATE: vector_api.certificate,
+        CONF_NAME: data[CONF_NAME],
+        CONF_GUID: vector_api.guid,
+    }
+
+    await store.async_save(config)
 
     return True
 

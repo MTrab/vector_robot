@@ -1,19 +1,19 @@
 """DDL Vector constants."""
 from __future__ import annotations
-import platform
 
 from homeassistant.const import STATE_UNAVAILABLE
-
 
 DOMAIN = "vector_robot"
 
 # Update signals
-UPDATE_SIGNAL = "vector_update"
+UPDATE_SIGNAL = "vector_update_{}"
 
 # Config consts.
 CONF_ID = "vector_id"
 CONF_IP = "vector_ip"
 CONF_SERIAL = "vector_serial"
+CONF_GUID = "guid"
+CONF_CERTIFICATE = "cert"
 
 # Supported platforms
 PLATFORMS = ["sensor", "button"]
