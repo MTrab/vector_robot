@@ -4,12 +4,12 @@ from __future__ import annotations
 import logging
 
 import voluptuous as vol
-from .api_override.home_assistant import API
 from homeassistant import config_entries, exceptions
 from homeassistant.const import CONF_EMAIL, CONF_NAME, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+from .api_override.setup import VectorSetup
 from .const import CONF_CERTIFICATE, CONF_GUID, CONF_IP, CONF_SERIAL, DOMAIN
 from .helpers import VectorStore
 
@@ -32,7 +32,7 @@ async def validate_input(hass: HomeAssistant, data: dict) -> bool:
     """
     store = VectorStore(hass, data[CONF_NAME])
     await store.async_load()
-    vector_api = API(
+    vector_api = VectorSetup(
         data[CONF_EMAIL],
         data[CONF_PASSWORD],
         data[CONF_NAME],
@@ -93,7 +93,6 @@ class DDLVectorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._errors["base"] = "unknown"
 
             if "base" not in self._errors:
-                _LOGGER.debug(validated)
                 return self.async_create_entry(
                     title=user_input[CONF_NAME],
                     data=user_input,

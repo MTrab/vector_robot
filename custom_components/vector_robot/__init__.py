@@ -1,4 +1,5 @@
 """Base definition of DDL Vector."""
+# pylint: disable=unused-argument
 from __future__ import annotations
 
 import logging
@@ -11,15 +12,15 @@ from typing import Optional, cast
 import pytz
 from ha_vector.events import Events
 from ha_vector.exceptions import VectorConnectionException
-from .api_override.home_assistant import Robot
-from ha_vector.user_intent import UserIntent, UserIntentEvent
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_EMAIL, CONF_NAME, CONF_PASSWORD, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.loader import async_get_integration
 
+from .api_override.robot import Robot
 from .const import (
     ATTR_MESSAGE,
     ATTR_USE_VECTOR_VOICE,
@@ -32,30 +33,22 @@ from .const import (
     SERVICE_LEAVE_CHARGER,
     SERVICE_SPEAK,
     STARTUP,
-    STATE_CARRYING_OBJECT,
-    STATE_CARRYING_OBJECT_ON_TOP,
     STATE_CUBE_BATTERY_LEVEL,
     STATE_CUBE_BATTERY_VOLTS,
     STATE_CUBE_FACTORY_ID,
     STATE_CUBE_LAST_CONTACT,
     STATE_FIRMWARE_VERSION,
-    STATE_FOUND_OBJECT,
-    STATE_HEAD_TRACKING_ID,
-    STATE_LIFT_IN_FOV,
     STATE_ROBOT_BATTERY_LEVEL,
     STATE_ROBOT_BATTERY_VOLTS,
     STATE_ROBOT_IS_CHARGNING,
     STATE_ROBOT_IS_ON_CHARGER,
     STATE_ROBOT_SUGGESTED_CHARGE,
-    STATE_STIMULATION,
-    STATE_TIME_STAMPED,
     UPDATE_SIGNAL,
 )
 from .helpers.storage import VectorStore
 from .schemes import TTS
-from .states import FEATURES_TO_IGNORE, STIMULATIONS_TO_IGNORE, VectorStates
-from .vector_utils import Chatter, DataRunner
-from .vector_utils.const import VectorDatasets
+from .states import VectorStates
+from .vector_utils import DataRunner
 
 # Vector-A6S1
 # 00908e7e
@@ -172,28 +165,33 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
             estimate_facial_expression=True,
             enable_audio_feed=True,
             name=self._config_data[CONF_NAME],
-            ip=self._config_data[CONF_IP],
+            ip_address=self._config_data[CONF_IP],
             config=self._config,
             loop=hass.loop,
+            force_async=True,
         )
+
         self.states = VectorStates()
         # self.chatter = Chatter(self._dataset)
         # self.chatter.get_text(VectorDatasets.DIALOGS, "cliff")
 
-        self.robot.connect()
+        try:
+            self.robot.connect()
+        except Exception as exc:
+            raise HomeAssistantError from exc
 
-        def on_robot_wake_word(robot, event_type, event):
+        async def _async_on_robot_wake_word(robot, event_type, event):
             """React to wake word."""
 
             if event == "wake_word_begin":
-                robot.conn.request_control()
-                robot.behavior.say_text(
-                    text="You called!",
+                await self.hass.async_add_executor_job(robot.conn.request_control)
+                await self.hass.async_add_executor_job(
+                    robot.behavior.say_text, "You called!"
                 )
-                robot.conn.release_control()
+                await self.hass.async_add_executor_job(robot.conn.release_control)
 
         ### Subscribe to events
-        self.robot.events.subscribe(on_robot_wake_word, Events.wake_word)
+        self.robot.events.subscribe(_async_on_robot_wake_word, Events.wake_word)
 
         ### Register services
         # TTS / Speak
