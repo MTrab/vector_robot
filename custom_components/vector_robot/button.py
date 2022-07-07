@@ -1,6 +1,7 @@
 """Vector robot buttons."""
 from __future__ import annotations
 from dataclasses import dataclass
+from functools import partial
 
 import logging
 
@@ -71,10 +72,11 @@ class VectorButton(VectorBase, ButtonEntity):
         )
         self._attr_unique_id = f"{coordinator.name}_button_{description.key}"
         self._attr_icon = description.icon
+        self._coordinator = coordinator
 
     async def async_press(self) -> None:
         """Handles button press."""
-        call = getattr(self, self._call_function)
+        call = getattr(self._coordinator, self._call_function)
         await call()
 
 

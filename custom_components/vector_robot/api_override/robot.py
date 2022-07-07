@@ -1,12 +1,12 @@
 """Home Assistant specific calls."""
 # pylint: disable=invalid-name
 from __future__ import annotations
+import asyncio
 
 __all__ = ["Robot"]
 
 import concurrent
 import logging
-from asyncio import AbstractEventLoop
 from typing import Any
 
 from ha_vector import (
@@ -54,7 +54,7 @@ class Robot:
         ip_address: str,
         name: str,
         config: dict,
-        loop: AbstractEventLoop,
+        # loop: AbstractEventLoop,
         escape_pod: bool = False,
         logger: Any | None = None,
         behavior_activation_timeout: int = 10,
@@ -75,13 +75,17 @@ class Robot:
             self.logger = logging.getLogger(__name__)
 
         self._config = config
-        self._loop = loop
+        self._loop = asyncio.get_running_loop()
         self._force_async = force_async
 
         self._escape_pod = escape_pod
         self._name = self._config["name"] if "name" in self._config else name
         self._cert_file = self._config["cert"] if "cert" in self._config else None
-        self._guid = self._config["guid"] if "guid" in self._config else None
+        self._guid = (
+            self._config["guid"].replace("b'", "").replace("'", "")
+            if "guid" in self._config
+            else None
+        )
         self._port = self._config["port"] if "port" in self._config else "443"
         self._ip = self._config["ip"] if "ip" in self._config else ip_address
         self._serial = self._config["serial"] if "serial" in self._config else serial
@@ -98,8 +102,6 @@ class Robot:
             guid=self._guid,
             escape_pod=self._escape_pod,
             behavior_control_level=behavior_control_level,
-            # loop=self._loop,
-            # logger=self.logger,
         )
 
         self._events = events.EventHandler(self)
@@ -468,11 +470,11 @@ class Robot:
         )
 
         # access the pose to prove it has gotten back from the event stream once
-        try:
-            if not self.pose:
-                pass
-        except VectorPropertyValueNotReadyException as e:
-            raise VectorUnreliableEventStreamException() from e
+        # try:
+        #     if not self.pose:
+        #         pass
+        # except VectorPropertyValueNotReadyException as e:
+        #     raise VectorUnreliableEventStreamException() from e
 
     def disconnect(self) -> None:
         """Close the connection with Vector."""

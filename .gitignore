@@ -366,3 +366,7 @@ test.py
 whatisupdated.txt
 configuration.yaml
 .devcontainer/configuration.yaml
+.env
+.env.py
+env.py
+.vector/

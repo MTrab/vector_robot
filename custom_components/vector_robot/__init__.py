@@ -1,6 +1,7 @@
 """Base definition of DDL Vector."""
 # pylint: disable=unused-argument
 from __future__ import annotations
+import asyncio
 
 import logging
 import random
@@ -20,6 +21,7 @@ from homeassistant.helpers.dispatcher import dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.loader import async_get_integration
 
+from ha_vector.robot import AsyncRobot
 from .api_override.robot import Robot
 from .const import (
     ATTR_MESSAGE,
@@ -167,7 +169,6 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
             name=self._config_data[CONF_NAME],
             ip_address=self._config_data[CONF_IP],
             config=self._config,
-            loop=hass.loop,
             force_async=True,
         )
 
@@ -180,18 +181,9 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
         except Exception as exc:
             raise HomeAssistantError from exc
 
-        async def _async_on_robot_wake_word(robot, event_type, event):
-            """React to wake word."""
-
-            if event == "wake_word_begin":
-                await self.hass.async_add_executor_job(robot.conn.request_control)
-                await self.hass.async_add_executor_job(
-                    robot.behavior.say_text, "You called!"
-                )
-                await self.hass.async_add_executor_job(robot.conn.release_control)
-
         ### Subscribe to events
-        self.robot.events.subscribe(_async_on_robot_wake_word, Events.wake_word)
+        self.robot.events.subscribe(self._on_robot_wake_word, Events.wake_word)
+        self.robot.events.subscribe(self._on_event, Events.robot_state)
 
         ### Register services
         # TTS / Speak
@@ -209,36 +201,52 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
 
         super().__init__(hass, _LOGGER, name=self.name, update_interval=SCAN_INTERVAL)
 
-    async def async_drive_on_charger(self, _) -> None:
+    async def _on_event(self, robot, event_type, event, done):
+        """Generic debug event callback."""
+        _LOGGER.debug(
+            "Event data:\nRobot: %s\nEvent_type: %s\nEvent: %s",
+            robot,
+            event_type,
+            event,
+        )
+
+    async def _on_robot_wake_word(self, robot, event_type, event, done):
+        """React to wake word."""
+
+        if event == "wake_word_begin":
+            await self.hass.async_add_executor_job(robot.conn.request_control)
+            await self.hass.async_add_executor_job(
+                robot.behavior.say_text, "You called!"
+            )
+            await self.hass.async_add_executor_job(robot.conn.release_control)
+
+    async def async_drive_on_charger(self, *args, **kwargs) -> None:
         """Send Vector to the charger."""
         _LOGGER.debug("Asking Vector to go onto the charger")
-        await self.hass.async_add_executor_job(self.robot.conn.request_control)
-        await self.hass.async_add_executor_job(self.robot.behavior.drive_on_charger)
-        await self.hass.async_add_executor_job(self.robot.conn.release_control, 1.0)
+        await asyncio.wrap_future(self.robot.conn.request_control())
+        await asyncio.wrap_future(self.robot.behavior.drive_on_charger())
+        await asyncio.wrap_future(self.robot.conn.release_control())
 
-    async def async_drive_off_charger(self, _) -> None:
+    async def async_drive_off_charger(self, *args, **kwargs) -> None:
         """Send Vector to the charger."""
         _LOGGER.debug("Asking Vector to leave the charger")
-        _LOGGER.debug("Awaiting control to be handed over.")
-        await self.hass.async_add_executor_job(self.robot.conn.request_control)
-        _LOGGER.debug("Got control - awaiting the action to be handled")
-        await self.hass.async_add_executor_job(self.robot.behavior.drive_off_charger)
-        _LOGGER.debug("Awaiting control to be released.")
-        await self.hass.async_add_executor_job(self.robot.conn.release_control, 1.0)
-        _LOGGER.debug("Control was handed over to Vector again.")
+        await asyncio.wrap_future(self.robot.conn.request_control())
+        await asyncio.wrap_future(self.robot.behavior.drive_off_charger())
+        await asyncio.wrap_future(self.robot.conn.release_control())
 
     async def async_tts(self, service_call: ServiceCall) -> None:
         """Make Vector speak."""
         _LOGGER.debug("Asking Vector to say a text")
         try:
-            await self.hass.async_add_executor_job(self.robot.conn.request_control)
-            await self.hass.async_add_executor_job(
-                self.robot.behavior.say_text,
-                service_call.data[ATTR_MESSAGE],
-                service_call.data[ATTR_USE_VECTOR_VOICE],
-                1.0,
+            await asyncio.wrap_future(self.robot.conn.request_control())
+            await asyncio.wrap_future(
+                self.robot.behavior.say_text(
+                    text=service_call.data[ATTR_MESSAGE],
+                    use_vector_voice=service_call.data[ATTR_USE_VECTOR_VOICE],
+                    duration_scalar=1.0,
+                )
             )
-            await self.hass.async_add_executor_job(self.robot.conn.release_control, 1.0)
+            await asyncio.wrap_future(self.robot.conn.release_control())
         except VectorConnectionException:
             _LOGGER.warning("Something happend while sending TTS to Vector :(")
 

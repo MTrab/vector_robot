@@ -47,7 +47,7 @@ async def validate_input(hass: HomeAssistant, data: dict) -> bool:
     config = {
         CONF_CERTIFICATE: vector_api.certificate,
         CONF_NAME: data[CONF_NAME],
-        CONF_GUID: vector_api.guid,
+        CONF_GUID: vector_api.guid.replace("b'", "").replace("'", ""),
     }
 
     await store.async_save(config)
