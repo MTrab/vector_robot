@@ -22,3 +22,15 @@ DATASETS = {
     VectorDatasets.VARIATIONS: "variations.json",
     VectorDatasets.WEATHER: None,
 }
+
+JOKE_ANIM = [
+    "GreetAfterLongTime",
+    "ComeHereSuccess",
+    "OnboardingReactToFaceHappy",
+    "PickupCubeSuccess",
+    "PounceSuccess",
+    "ConnectToCubeSuccess",
+    "FetchCubeSuccess",
+    "FistBumpSuccess",
+    "OnboardingWakeWordSuccess"
+]

@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import random
 from datetime import datetime, timedelta
 from enum import IntEnum
 from functools import partial
-from re import L
 from typing import Optional, cast
 
 import pytz
 from ha_vector.events import Events
 from ha_vector.exceptions import (
     VectorConnectionException,
+    VectorNotFoundException,
+    VectorTimeoutException,
     VectorUnauthenticatedException,
 )
 from ha_vector.robot import AsyncRobot
@@ -23,6 +23,7 @@ from homeassistant.const import CONF_EMAIL, CONF_NAME, CONF_PASSWORD, STATE_UNKN
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import dispatcher_send
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.loader import async_get_integration
 
@@ -32,7 +33,6 @@ from .const import (
     BATTERYMAP_TO_STATE,
     CONF_IP,
     CONF_SERIAL,
-    CUBE_BATTERYMAP_TO_STATE,
     DOMAIN,
     PLATFORMS,
     SERVICE_GOTO_CHARGER,
@@ -105,8 +105,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             coordinator = VectorDataUpdateCoordinator(hass, entry, config, dataset.path)
         except VectorUnauthenticatedException as exc:
             raise HomeAssistantError from exc
-    except VectorConnectionException as exc:
-        raise HomeAssistantError from exc
+    except (VectorNotFoundException, VectorTimeoutException, VectorConnectionException):
+        _LOGGER.error("Couldn't connect to %s", entry.data[CONF_NAME])
+        # async_call_later(hass,timedelta(seconds=10),async_setup_entry(hass,entry))
+        # hass.loop.call_later(10, async_setup_entry,hass,entry)
+        return False
     except Exception as exc:
         raise HomeAssistantError from exc
 
@@ -203,6 +206,7 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
         )
 
         self.states = VectorStates()
+        super().__init__(hass, _LOGGER, name=self.name, update_interval=SCAN_INTERVAL)
 
         self.robot.connect()
 
@@ -258,7 +262,7 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
                 await self.speak.async_speak(text="You called?")
             elif myevent == "NoValidVoiceIntent":
                 await self.speak.async_speak(text="Sorry, I didn't understand.")
-            elif myevent in ["PettingStarted","PettingBlissLevelIncrease"]:
+            elif myevent in ["PettingStarted", "PettingBlissLevelIncrease"]:
                 await self.speak.async_speak(predefined=VectorSpeachType.PETTING)
 
         # async def on_event(robot, event_type, event, done=None):
@@ -346,7 +350,25 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
             DOMAIN, SERVICE_LEAVE_CHARGER, partial(self.async_drive_off_charger)
         )
 
-        super().__init__(hass, _LOGGER, name=self.name, update_interval=SCAN_INTERVAL)
+        def load_anim_list() -> None:
+            try:
+                self.robot.anim.load_animation_list()
+            except VectorTimeoutException:
+                _LOGGER.debug(
+                    "Couldn't load animations list, got a timeout - trying again in 5 seconds."
+                )
+                async_call_later(hass, timedelta(seconds=5), load_anim_list)
+
+        self.robot.vision.enable_face_detection(
+            detect_faces=True, estimate_expression=True
+        )
+        load_anim_list()
+
+    async def async_speak_joke(self, *args, **kwargs) -> None:
+        """Tell a joke."""
+        await self.speak.async_speak(
+            predefined=VectorSpeachType.JOKE, force_speech=True
+        )
 
     async def async_drive_on_charger(self, *args, **kwargs) -> None:
         """Send Vector to the charger."""
@@ -367,6 +389,7 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
         await self.speak.async_speak(
             text=service_call.data[ATTR_MESSAGE],
             use_vector_voice=service_call.data[ATTR_USE_VECTOR_VOICE],
+            force_speech=True,
         )
 
     async def _async_update_data(self) -> datetime | None:

@@ -23,6 +23,16 @@ class ChatterResponse:
     text: str
 
 
+@dataclass
+class JokeResponse:
+    """Dataclass for holding a joke response."""
+
+    min: int
+    max: int
+    text: str
+    punchline: str | None
+
+
 class Chatter:
     """Class for handling Vectors chatter."""
 
@@ -70,15 +80,32 @@ class Chatter:
 
                 self.__datasets.update({data[0]: res})
 
-    def get_text(self, data_type: VectorDatasets, event: str) -> ChatterResponse:
+    def get_text(
+        self, data_type: VectorDatasets, event: str | None = None
+    ) -> ChatterResponse | JokeResponse:
         """Get random text response."""
-        dataset = self.__datasets[data_type][event]
+        if data_type == VectorDatasets.JOKES:
+            dataset = self.__datasets[data_type]
+            rand_joke = random.randrange(0, len(dataset))
 
-        rand_line = random.randrange(0, len(dataset["sentence"]))
-        interval_min = dataset["min"] * self.__chattiness
-        interval_max = dataset["max"] * self.__chattiness
-        text = self.__substitute(dataset["sentence"][rand_line])
-        return ChatterResponse(interval_min, interval_max, text)
+            return JokeResponse(
+                dataset[rand_joke]["min"],
+                dataset[rand_joke]["max"],
+                self.__substitute(dataset[rand_joke]["text"]),
+                (
+                    self.__substitute(dataset[rand_joke]["punchline"])
+                    if not dataset[rand_joke]["punchline"] == ""
+                    else None
+                ),
+            )
+        else:
+            dataset = self.__datasets[data_type][event]
+            rand_line = random.randrange(0, len(dataset["sentence"]))
+            return ChatterResponse(
+                dataset["min"] * self.__chattiness,
+                dataset["max"] * self.__chattiness,
+                self.__substitute(dataset["sentence"][rand_line]),
+            )
 
     def __substitute(self, text: str) -> str:
         """Substitute some strings."""

@@ -31,13 +31,21 @@ https://github.com/mtrab/vector_robot/issues
 # Icon list and consts.
 ICON_CUBE = "cube"
 ICON_ROBOT = "robot"
+ICON_FACE = "face"
 
-VECTOR_ICON = {ICON_ROBOT: "mdi:robot", ICON_CUBE: "mdi:cube"}
+VECTOR_ICON = {
+    ICON_ROBOT: "mdi:robot",
+    ICON_CUBE: "mdi:cube",
+    ICON_FACE: "mdi:face-recognition",
+}
 
 # Service constants
 SERVICE_GOTO_CHARGER = "goto_charger"
 SERVICE_LEAVE_CHARGER = "leave_charger"
 SERVICE_SPEAK = "speak"
+
+# Buttons
+BUTTON_GENERIC = "generic"
 
 # Attribs
 ATTR_MESSAGE = "message"

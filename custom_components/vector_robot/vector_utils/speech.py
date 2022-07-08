@@ -9,12 +9,12 @@ from enum import Enum
 import random
 
 from .chatter import Chatter
-from .const import VectorDatasets
+from .const import JOKE_ANIM, VectorDatasets
 
 _LOGGER = logging.getLogger(__name__)
 
 # Sometimes speech doesn't work, lets try again MAX_ATTEMPTS times.
-MAX_ATTEMPTS = 15
+MAX_ATTEMPTS = 5
 
 
 class VectorSpeachType(Enum):
@@ -26,6 +26,7 @@ class VectorSpeachType(Enum):
     CLIFF = "cliff"  # When finding a "cliff" or other noticable color change
     GREETING = "greeting"  # Greeting
     DROP = "drop"  # When dropped or falling
+    JOKE = "joke"  # Tell a random joke
 
 
 class VectorSpeech:
@@ -45,6 +46,7 @@ class VectorSpeech:
         predefined: VectorSpeachType = VectorSpeachType.CUSTOM,
         use_vector_voice: bool = True,
         speed: float = 1.0,
+        force_speech: bool = False,
     ) -> None:
         """Routing for making Vector speak."""
         attempt = 0
@@ -69,7 +71,7 @@ class VectorSpeech:
                 "next": now + timedelta(seconds=random.randint(2, 15)),
             }
 
-        if now < self.__last[predefined]["next"]:
+        if now < self.__last[predefined]["next"] and not force_speech:
             return  # Too soon to speak again
 
         if predefined == VectorSpeachType.CUSTOM:
@@ -78,6 +80,10 @@ class VectorSpeech:
                 "last": now,
                 "next": now + timedelta(seconds=random.randint(2, 15)),
             }
+        elif predefined == VectorSpeachType.JOKE:
+            chatter = Chatter(self.__dataset)
+            response = chatter.get_text(VectorDatasets.JOKES)
+            to_say = response.text
         else:
             chatter = Chatter(self.__dataset)
             response = chatter.get_text(VectorDatasets.DIALOGS, predefined)
@@ -97,10 +103,25 @@ class VectorSpeech:
                     self.robot.behavior.say_text(
                         text=to_say,
                         use_vector_voice=use_vector_voice,
-                        duration_scalar=speed,
+                        duration_scalar=speed
+                        if predefined != VectorSpeachType.JOKE
+                        else 1.15,
                     )
                 )
-                await asyncio.wrap_future(self.robot.conn.release_control())
+
+                if predefined == VectorSpeachType.JOKE:
+                    if not isinstance(response.punchline, type(None)):
+                        await asyncio.sleep(random.randint(response.min, response.max))
+                        await asyncio.wrap_future(
+                            self.robot.behavior.say_text(
+                                text=response.punchline,
+                                use_vector_voice=use_vector_voice,
+                                duration_scalar=1.15,
+                            )
+                        )
+                    await self.robot.anim.play_animation_trigger(
+                        random.choice(JOKE_ANIM)
+                    )
                 return
             except:
                 _LOGGER.debug(
@@ -110,4 +131,5 @@ class VectorSpeech:
 
         if attempt == MAX_ATTEMPTS:
             _LOGGER.error("Couldn't persuade Vector to talk :(")
-            await asyncio.wrap_future(self.robot.conn.release_control())
+
+        await asyncio.wrap_future(self.robot.conn.release_control())

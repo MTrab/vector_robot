@@ -23,6 +23,7 @@ from .base import VectorBase, VectorBaseEntityDescription
 from .const import (
     DOMAIN,
     ICON_CUBE,
+    ICON_FACE,
     ICON_ROBOT,
     LANG_BATTERY,
     LANG_OBSERVATIONS,
@@ -126,7 +127,7 @@ SENSORS = [
     VectorSensorEntityDescription(
         key=VectorSensorFeature.OBSERVATION,
         name="Faces",
-        icon=VECTOR_ICON[ICON_ROBOT],
+        icon=VECTOR_ICON[ICON_FACE],
         sensor_type=VectorSensorType.STATE,
         translate_key=LANG_OBSERVATIONS,
         update_signal=f"{UPDATE_SIGNAL}_observations",
