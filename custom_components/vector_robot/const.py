@@ -1,8 +1,6 @@
 """DDL Vector constants."""
 from __future__ import annotations
 
-from homeassistant.const import STATE_UNAVAILABLE
-
 DOMAIN = "vector_robot"
 
 # Update signals
@@ -16,7 +14,7 @@ CONF_GUID = "guid"
 CONF_CERTIFICATE = "cert"
 
 # Supported platforms
-PLATFORMS = ["sensor", "button"]
+PLATFORMS = ["sensor", "button", "camera"]
 
 # Startup banner
 STARTUP = """
@@ -50,18 +48,11 @@ STATE_LOW = "low"
 STATE_NORMAL = "normal"
 STATE_FULL = "full"
 
-# Battery map
-BATTERYMAP_TO_STATE = {
-    0: STATE_UNAVAILABLE,
-    1: STATE_LOW,
-    2: STATE_NORMAL,
-    3: STATE_FULL,
-}
-
 # Translation keys
 LANG_STATE = "state"
 LANG_BATTERY = "battery"
 LANG_STIMULI = "stimuli"
+LANG_OBSERVATIONS = "observations"
 
 # Misc. consts
 STATE_TIME_STAMPED = "time_stamped_feature"
@@ -81,3 +72,14 @@ STATE_CARRYING_OBJECT_ON_TOP = "carrying_object_on_top_id"
 STATE_HEAD_TRACKING_ID = "head_tracking_id"
 STATE_FOUND_OBJECT = "found_object"
 STATE_LIFT_IN_FOV = "lift_in_fov"
+STATE_NO_DATA = "no_data"
+
+# Mappings
+BATTERYMAP_TO_STATE = {
+    0: STATE_NO_DATA,
+    1: STATE_LOW,
+    2: STATE_NORMAL,
+    3: STATE_FULL,
+}
+
+CUBE_BATTERYMAP_TO_STATE = {0: STATE_LOW, 1: STATE_NORMAL}

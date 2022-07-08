@@ -1,10 +1,12 @@
 """Base definitions."""
 from __future__ import annotations
+from dataclasses import dataclass, field
 from datetime import timedelta
 from functools import partial
 
 import logging
 
+from homeassistant.helpers.entity import EntityDescription
 from homeassistant.const import STATE_UNKNOWN
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -13,7 +15,7 @@ from ha_vector.exceptions import VectorTimeoutException, VectorAsyncException
 
 from . import VectorDataUpdateCoordinator, VectorConnectionState
 
-from .const import DOMAIN, STATE_FIRMWARE_VERSION
+from .const import DOMAIN, STATE_FIRMWARE_VERSION, STATE_NO_DATA
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +38,16 @@ def connect(self) -> bool:
         self.connection_state = VectorConnectionState.DISCONNECTED
         async_call_later(self.hass, timedelta(minutes=1), partial(self.connect))
         return False
+
+
+@dataclass
+class VectorBaseEntityDescription(EntityDescription):
+    """Describes a Vector sensor."""
+
+    state_attr: str | None = None
+    vector_attributes: dict | None = field(default_factory=dict)
+    translate_key: str | None = None
+    start_value: str = STATE_NO_DATA
 
 
 class VectorBase(CoordinatorEntity):

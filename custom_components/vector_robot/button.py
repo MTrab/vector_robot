@@ -17,9 +17,9 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import VectorDataUpdateCoordinator
 
-from .const import DOMAIN, SERVICE_GOTO_CHARGER, SERVICE_LEAVE_CHARGER
+from .const import DOMAIN, SERVICE_GOTO_CHARGER, SERVICE_LEAVE_CHARGER, STATE_NO_DATA
 
-from .base import VectorBase
+from .base import VectorBase, VectorBaseEntityDescription
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,7 +32,9 @@ class VectorButtonTypes(StrEnum):
 
 
 @dataclass
-class VectorButtonEntityDescription(ButtonEntityDescription):
+class VectorButtonEntityDescription(
+    VectorBaseEntityDescription, ButtonEntityDescription
+):
     """Describes a Vector button."""
 
     call_function: str | None = None

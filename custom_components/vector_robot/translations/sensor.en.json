@@ -4,9 +4,11 @@
             "unknown": "Unknown",
             "low": "Low",
             "normal": "Normal",
-            "full": "Full"
+            "full": "Full",
+            "no_data": "No state received"
         },
         "vector_robot__state": {
+            "no_data": "No state received",
             "unknown": "Unknown",
             "sleeping": "Sleeping",
             "bbservingoncharger": "Observing from the charger",
@@ -25,9 +27,12 @@
             "keepaway": "Arms up",
             "findhome": "Looking for charger",
             "exploring": "Exploring the world",
-            "reacttohand": "Reacting to a hand"
+            "reacttohand": "Reacting to a hand",
+            "dancetothebeat": "Dancing to the beat",
+            "observingoncharger": "Observing from the charger"
         },
         "vector_robot__stimuli": {
+            "no_data": "No state received",
             "reacttosoundawake": "Heard something",
             "pettingstarted": "Being petted",
             "pettingblisslevelincrease": "Being petted",
@@ -39,7 +44,13 @@
             "dancetothebeat": "Dancing to the beat",
             "keepawaystarted": "Keepaway action",
             "exploringexamineobstacle": "Examining obstacle",
-            "cliffreact": "Found a cliff"
+            "cliffreact": "Found a cliff",
+            "placedoncharger": "Placed on charger",
+            "lookatfaceverified": "Saw a familiar face",
+            "mountchargersuccess": "Succeeded in finding the charger"
+        },
+        "vector_robot__observations": {
+            "no_data": "Nothing observed yet"
         }
     }
 }

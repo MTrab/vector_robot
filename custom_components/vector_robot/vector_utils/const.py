@@ -18,7 +18,7 @@ class VectorDatasets(IntEnum):
 DATASETS = {
     VectorDatasets.DIALOGS: "dialog.json",
     VectorDatasets.FACTS: None,
-    VectorDatasets.JOKES: None,
+    VectorDatasets.JOKES: "jokes.json",
     VectorDatasets.VARIATIONS: "variations.json",
     VectorDatasets.WEATHER: None,
 }
