@@ -119,9 +119,17 @@ class VectorSpeech:
                                 duration_scalar=1.15,
                             )
                         )
-                    await self.robot.anim.play_animation_trigger(
-                        random.choice(JOKE_ANIM)
-                    )
+
+                    try:
+                        await asyncio.wrap_future(
+                            self.robot.anim.play_animation_trigger(
+                                random.choice(JOKE_ANIM)
+                            )
+                        )
+                    except:
+                        pass
+
+                await asyncio.wrap_future(self.robot.conn.release_control())
                 return
             except:
                 _LOGGER.debug(
