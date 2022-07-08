@@ -33,7 +33,7 @@
 			"I've fallen and I can't get up!"
 		]
 	},
-	"petted": {
+	"petting": {
 		"min": 10,
 		"max": 15,
 		"sentence": [
