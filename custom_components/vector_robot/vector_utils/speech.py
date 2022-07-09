@@ -17,8 +17,8 @@ _LOGGER = logging.getLogger(__name__)
 MAX_ATTEMPTS = 5
 
 
-class VectorSpeachType(Enum):
-    """Supported types of speach."""
+class VectorSpeechType(Enum):
+    """Supported types of Speech."""
 
     PASS = "pass"  # Do nothing
     CUSTOM = "custom"  # Custom text
@@ -43,13 +43,14 @@ class VectorSpeech:
     async def async_speak(
         self,
         text: str | None = None,
-        predefined: VectorSpeachType = VectorSpeachType.CUSTOM,
+        predefined: VectorSpeechType = VectorSpeechType.CUSTOM,
         use_vector_voice: bool = True,
         speed: float = 1.0,
         force_speech: bool = False,
     ) -> None:
         """Routing for making Vector speak."""
         attempt = 0
+        _LOGGER.debug("Predefine called: %s", predefined)
 
         # If Vector is doing something, don't speak
         if self.robot.status.is_pathing is True:
@@ -58,7 +59,7 @@ class VectorSpeech:
 
         # This adds a bit of controllable randomness to some of the random dialogues
         # (jokes, telling the time, etc.)
-        if predefined == VectorSpeachType.PASS:
+        if predefined == VectorSpeechType.PASS:
             _LOGGER.debug(
                 "Instead of attempting a random comment, I chose to pass this time..."
             )
@@ -74,19 +75,19 @@ class VectorSpeech:
         if now < self.__last[predefined]["next"] and not force_speech:
             return  # Too soon to speak again
 
-        if predefined == VectorSpeachType.CUSTOM:
+        if predefined == VectorSpeechType.CUSTOM:
             to_say = text
             self.__last[predefined] = {
                 "last": now,
                 "next": now + timedelta(seconds=random.randint(2, 15)),
             }
-        elif predefined == VectorSpeachType.JOKE:
+        elif predefined == VectorSpeechType.JOKE:
             chatter = Chatter(self.__dataset)
             response = chatter.get_text(VectorDatasets.JOKES)
             to_say = response.text
         else:
             chatter = Chatter(self.__dataset)
-            response = chatter.get_text(VectorDatasets.DIALOGS, predefined)
+            response = chatter.get_text(VectorDatasets.DIALOGS, predefined.value)
             to_say = response.text
             self.__last[predefined] = {
                 "last": now,
@@ -104,12 +105,12 @@ class VectorSpeech:
                         text=to_say,
                         use_vector_voice=use_vector_voice,
                         duration_scalar=speed
-                        if predefined != VectorSpeachType.JOKE
+                        if predefined != VectorSpeechType.JOKE
                         else 1.15,
                     )
                 )
 
-                if predefined == VectorSpeachType.JOKE:
+                if predefined == VectorSpeechType.JOKE:
                     if not isinstance(response.punchline, type(None)):
                         await asyncio.sleep(random.randint(response.min, response.max))
                         await asyncio.wrap_future(

@@ -28,6 +28,7 @@ from .const import (
     LANG_BATTERY,
     LANG_OBSERVATIONS,
     LANG_STATE,
+    SENSOR_FACE_LAST_SEEN,
     STATE_CARRYING_OBJECT,
     STATE_CARRYING_OBJECT_ON_TOP,
     STATE_CUBE_BATTERY_LEVEL,
@@ -126,7 +127,7 @@ SENSORS = [
     ),
     VectorSensorEntityDescription(
         key=VectorSensorFeature.OBSERVATION,
-        name="Faces",
+        name=SENSOR_FACE_LAST_SEEN,
         icon=VECTOR_ICON[ICON_FACE],
         sensor_type=VectorSensorType.STATE,
         translate_key=LANG_OBSERVATIONS,
@@ -183,13 +184,15 @@ class VectorBaseSensorEntity(VectorBase, SensorEntity):
             ]
         elif self.entity_description.key == VectorSensorFeature.OBSERVATION:
             _LOGGER.debug("Updating observations sensor")
-            if self.entity_description.name == "Faces":
+            if self.entity_description.name == SENSOR_FACE_LAST_SEEN:
                 self._attr_extra_state_attributes.update(
                     {"faces": self.coordinator.observations.faces}
                 )
                 face = {"name": STATE_NO_DATA, "last_seen": 0}
-                for name, info in self.coordinator.observations.faces:
-                    if info["last_seen"] > face["last_seen"]:
+                for name, info in self.coordinator.observations.faces.items():
+                    if isinstance(face["last_seen"],int):
+                        face.update({"name": name, "last_seen": info["last_seen"]})
+                    elif info["last_seen"] > face["last_seen"]:
                         face.update({"name": name, "last_seen": info["last_seen"]})
                 self._attr_native_value = face["name"]
         else:

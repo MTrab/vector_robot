@@ -62,7 +62,7 @@ from .states import FEATURES_TO_IGNORE, STIMULATIONS_TO_IGNORE, VectorStates
 from .vector_utils import DataRunner
 from .vector_utils.config import validate_input
 from .vector_utils.observations import Face, Observation
-from .vector_utils.speech import VectorSpeachType, VectorSpeech
+from .vector_utils.speech import VectorSpeechType, VectorSpeech
 
 # Vector-A6S1
 # 00908e7e
@@ -255,7 +255,7 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
             _LOGGER.debug(event)
             _LOGGER.debug(myevent)
             if not myevent in STIMULATIONS_TO_IGNORE:
-                self.states.update({STATE_STIMULATION: str(myevent[0]).lower()})
+                self.states.update({STATE_STIMULATION: str(myevent).lower()})
                 dispatcher_send(self.hass, UPDATE_SIGNAL)
 
             if myevent == "ReactToTriggerWord":
@@ -263,7 +263,7 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
             elif myevent == "NoValidVoiceIntent":
                 await self.speak.async_speak(text="Sorry, I didn't understand.")
             elif myevent in ["PettingStarted", "PettingBlissLevelIncrease"]:
-                await self.speak.async_speak(predefined=VectorSpeachType.PETTING)
+                await self.speak.async_speak(predefined=VectorSpeechType.PETTING)
 
         # async def on_event(robot, event_type, event, done=None):
         #     """Generic debug event callback."""
@@ -367,7 +367,7 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
     async def async_speak_joke(self, *args, **kwargs) -> None:
         """Tell a joke."""
         await self.speak.async_speak(
-            predefined=VectorSpeachType.JOKE, force_speech=True
+            predefined=VectorSpeechType.JOKE, force_speech=True
         )
 
     async def async_drive_on_charger(self, *args, **kwargs) -> None:
@@ -394,7 +394,7 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
 
     async def _async_update_data(self) -> datetime | None:
         """Update Vector data."""
-
+        # try:
         battery_state = self.robot.get_battery_state().result()
         version_state = self.robot.get_version_state().result()
 
@@ -438,3 +438,5 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
             dispatcher_send(self.hass, UPDATE_SIGNAL)
 
         return True
+        # except VectorConnectionException:
+        #     return False

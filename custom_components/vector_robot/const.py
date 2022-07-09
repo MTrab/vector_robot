@@ -4,7 +4,7 @@ from __future__ import annotations
 DOMAIN = "vector_robot"
 
 # Update signals
-UPDATE_SIGNAL = "vector_update_{}"
+UPDATE_SIGNAL = "vector_update_"
 
 # Config consts.
 CONF_ID = "vector_id"
@@ -46,6 +46,9 @@ SERVICE_SPEAK = "speak"
 
 # Buttons
 BUTTON_GENERIC = "generic"
+
+# Sensors
+SENSOR_FACE_LAST_SEEN = "Face last seen"
 
 # Attribs
 ATTR_MESSAGE = "message"
