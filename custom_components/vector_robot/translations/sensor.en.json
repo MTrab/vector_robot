@@ -31,24 +31,6 @@
             "dancetothebeat": "Dancing to the beat",
             "observingoncharger": "Observing from the charger"
         },
-        "vector_robot__stimuli": {
-            "no_data": "No state received",
-            "reacttosoundawake": "Heard something",
-            "pettingstarted": "Being petted",
-            "pettingblisslevelincrease": "Being petted",
-            "pettingreachedmaxbliss": "Being petted",
-            "reacttomotion": "Saw something moving",
-            "reacttoobstacle": "Reacted to an obstacle",
-            "reacttounexpectedmovement": "Reacted to unexpected movement",
-            "asleep": "Sleeping",
-            "dancetothebeat": "Dancing to the beat",
-            "keepawaystarted": "Keepaway action",
-            "exploringexamineobstacle": "Examining obstacle",
-            "cliffreact": "Found a cliff",
-            "placedoncharger": "Placed on charger",
-            "lookatfaceverified": "Saw a familiar face",
-            "mountchargersuccess": "Succeeded in finding the charger"
-        },
         "vector_robot__observations": {
             "no_data": "Nothing observed yet"
         }
