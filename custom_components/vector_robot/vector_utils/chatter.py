@@ -1,13 +1,14 @@
 """For handling the randominess in Vectors chatting and responses."""
 from __future__ import annotations
 
-import json
 import logging
 import os
 import random
 from dataclasses import dataclass
 
 from ha_vector import audio
+
+from homeassistant.helpers.json import json
 
 from .const import DATASETS, VectorDatasets
 

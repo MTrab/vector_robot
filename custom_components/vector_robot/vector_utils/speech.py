@@ -1,20 +1,19 @@
 """Stuff for making Vector speech easy to handle."""
 # pylint: disable=bare-except
 from __future__ import annotations
-
 import asyncio
+
 from datetime import datetime, timedelta
 import logging
 from enum import Enum
 import random
 
+from . import VectorHandler, VectorSpeechText
+
 from .chatter import Chatter
-from .const import JOKE_ANIM, VectorDatasets
+from .const import JOKE_ANIM, JOKE_SPEED, VectorDatasets
 
 _LOGGER = logging.getLogger(__name__)
-
-# Sometimes speech doesn't work, lets try again MAX_ATTEMPTS times.
-MAX_ATTEMPTS = 5
 
 
 class VectorSpeechType(Enum):
@@ -27,6 +26,8 @@ class VectorSpeechType(Enum):
     GREETING = "greeting"  # Greeting
     DROP = "drop"  # When dropped or falling
     JOKE = "joke"  # Tell a random joke
+    WAKE_WORD = "wake_word"  # When wake word (Hey Vector) was heard
+    INVALID = "invalid"  # When Vector doesn't understand what he was told/asked
 
 
 class VectorSpeech:
@@ -35,7 +36,7 @@ class VectorSpeech:
     __last = {}
     __dataset: str
 
-    def __init__(self, robot, dataset) -> None:
+    def __init__(self, robot: VectorHandler, dataset) -> None:
         """Initialize a speech class."""
         self.robot = robot
         self.__dataset = dataset
@@ -49,13 +50,7 @@ class VectorSpeech:
         force_speech: bool = False,
     ) -> None:
         """Routing for making Vector speak."""
-        attempt = 0
         _LOGGER.debug("Predefine called: %s", predefined)
-
-        # If Vector is doing something, don't speak
-        if self.robot.status.is_pathing is True:
-            _LOGGER.debug("I'm busy, cannot speak now...")
-            return
 
         # This adds a bit of controllable randomness to some of the random dialogues
         # (jokes, telling the time, etc.)
@@ -65,6 +60,7 @@ class VectorSpeech:
             )
             return
 
+        to_say = list[VectorSpeechText]
         now = datetime.now()
         if predefined not in self.__last:
             self.__last[predefined] = {
@@ -76,7 +72,12 @@ class VectorSpeech:
             return  # Too soon to speak again
 
         if predefined == VectorSpeechType.CUSTOM:
-            to_say = text
+            msg = VectorSpeechText()
+            msg.Text = text
+            msg.Speed = speed
+            msg.Vector_Voice = use_vector_voice
+            to_say.append(msg)
+
             self.__last[predefined] = {
                 "last": now,
                 "next": now + timedelta(seconds=random.randint(2, 15)),
@@ -84,61 +85,45 @@ class VectorSpeech:
         elif predefined == VectorSpeechType.JOKE:
             chatter = Chatter(self.__dataset)
             response = chatter.get_text(VectorDatasets.JOKES)
-            to_say = response.text
+            framing = VectorSpeechText()
+            framing.Text = response.text
+            framing.Speed = JOKE_SPEED
+            framing.Vector_Voice = use_vector_voice
+            to_say.append(framing)
+
+            if not isinstance(response.punchline, type(None)):
+                punchline = VectorSpeechText()
+                punchline.Text = response.text
+                punchline.Delay = random.randint(response.min, response.max)
+                punchline.Speed = JOKE_SPEED
+                punchline.Vector_Voice = use_vector_voice
+                to_say.append(punchline)
+
         else:
             chatter = Chatter(self.__dataset)
             response = chatter.get_text(VectorDatasets.DIALOGS, predefined.value)
-            to_say = response.text
+            msg = VectorSpeechText()
+            msg.Text = response.text
+            msg.Speed = speed
+            msg.Vector_Voice = use_vector_voice
+            to_say.append(msg)
+
             self.__last[predefined] = {
                 "last": now,
                 "next": now
                 + timedelta(seconds=random.randint(response.min, response.max)),
             }
 
-        while attempt < MAX_ATTEMPTS:
-            attempt = attempt + 1
+        await self.robot.async_speak(
+            messages=to_say,
+            use_vector_voice=use_vector_voice,
+            speed=speed if predefined != VectorSpeechType.JOKE else 1.15,
+        )
 
+        if predefined == VectorSpeechType.JOKE:
             try:
-                await asyncio.wrap_future(self.robot.conn.request_control())
                 await asyncio.wrap_future(
-                    self.robot.behavior.say_text(
-                        text=to_say,
-                        use_vector_voice=use_vector_voice,
-                        duration_scalar=speed
-                        if predefined != VectorSpeechType.JOKE
-                        else 1.15,
-                    )
+                    self.robot.anim.play_animation_trigger(random.choice(JOKE_ANIM))
                 )
-
-                if predefined == VectorSpeechType.JOKE:
-                    if not isinstance(response.punchline, type(None)):
-                        await asyncio.sleep(random.randint(response.min, response.max))
-                        await asyncio.wrap_future(
-                            self.robot.behavior.say_text(
-                                text=response.punchline,
-                                use_vector_voice=use_vector_voice,
-                                duration_scalar=1.15,
-                            )
-                        )
-
-                    try:
-                        await asyncio.wrap_future(
-                            self.robot.anim.play_animation_trigger(
-                                random.choice(JOKE_ANIM)
-                            )
-                        )
-                    except:
-                        pass
-
-                await asyncio.wrap_future(self.robot.conn.release_control())
-                return
             except:
-                _LOGGER.debug(
-                    "Couldn't get robot control. Trying to say '%s' again", to_say
-                )
-                await asyncio.sleep(1)
-
-        if attempt == MAX_ATTEMPTS:
-            _LOGGER.error("Couldn't persuade Vector to talk :(")
-
-        await asyncio.wrap_future(self.robot.conn.release_control())
+                pass

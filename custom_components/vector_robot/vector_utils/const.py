@@ -5,6 +5,7 @@ from enum import IntEnum
 # BASE_URL = "https://vector.trab.dk/dataset/{}"
 BASE_URL = "https://raw.githubusercontent.com/MTrab/vector_robot/dev/Datasets/{}"
 
+
 class VectorDatasets(IntEnum):
     """Vector dataset enum."""
 
@@ -32,5 +33,7 @@ JOKE_ANIM = [
     "ConnectToCubeSuccess",
     "FetchCubeSuccess",
     "FistBumpSuccess",
-    "OnboardingWakeWordSuccess"
+    "OnboardingWakeWordSuccess",
 ]
+
+JOKE_SPEED = 1.15

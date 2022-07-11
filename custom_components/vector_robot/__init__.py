@@ -17,7 +17,6 @@ from ha_vector.exceptions import (
     VectorTimeoutException,
     VectorUnauthenticatedException,
 )
-from ha_vector.robot import AsyncRobot
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_EMAIL, CONF_NAME, CONF_PASSWORD, STATE_UNKNOWN
 from homeassistant.core import HomeAssistant, ServiceCall
@@ -59,18 +58,13 @@ from .const import (
 from .helpers.storage import VectorStore
 from .schemes import TTS
 from .states import FEATURES_TO_IGNORE, STIMULATIONS_TO_IGNORE, VectorStates
-from .vector_utils import DataRunner
+from .vector_utils import VectorHandler
+from .vector_utils.datasetmanager import DataRunner
 from .vector_utils.config import validate_input
 from .vector_utils.observations import Face, Observation
 from .vector_utils.speech import VectorSpeechType, VectorSpeech
 
-# Vector-A6S1
-# 00908e7e
-# 192.168.1.223
-
-
 _LOGGER = logging.getLogger(__name__)
-
 SCAN_INTERVAL = timedelta(minutes=1)
 
 
@@ -191,7 +185,8 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
         self._config = config
         self._dataset = dataset_path
 
-        self.robot = AsyncRobot(
+        # self.robot = AsyncRobot(
+        self.robot = VectorHandler(
             self.serial,
             behavior_control_level=None,
             cache_animation_lists=False,
@@ -205,13 +200,16 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
             force_async=True,
         )
 
-        self.states = VectorStates()
-        super().__init__(hass, _LOGGER, name=self.name, update_interval=SCAN_INTERVAL)
-
-        self.robot.connect()
-
+        # Init custom speech, state and observation classes
         self.speak = VectorSpeech(self.robot, self._dataset)
         self.observations = Observation()
+        self.states = VectorStates()
+
+        super().__init__(hass, _LOGGER, name=self.name, update_interval=SCAN_INTERVAL)
+        self.robot.connect()
+
+        # Init camera feed
+        self.robot.camera.init_camera_feed()
 
         async def on_robot_observed_face(robot, event_type, event, done=None):
             for face in robot.world.visible_faces:
@@ -372,14 +370,12 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
 
     async def async_drive_on_charger(self, *args, **kwargs) -> None:
         """Send Vector to the charger."""
-        _LOGGER.debug("Asking Vector to go onto the charger")
         await asyncio.wrap_future(self.robot.conn.request_control())
         await asyncio.wrap_future(self.robot.behavior.drive_on_charger())
         await asyncio.wrap_future(self.robot.conn.release_control())
 
     async def async_drive_off_charger(self, *args, **kwargs) -> None:
         """Send Vector to the charger."""
-        _LOGGER.debug("Asking Vector to leave the charger")
         await asyncio.wrap_future(self.robot.conn.request_control())
         await asyncio.wrap_future(self.robot.behavior.drive_off_charger())
         await asyncio.wrap_future(self.robot.conn.release_control())
@@ -394,49 +390,63 @@ class VectorDataUpdateCoordinator(DataUpdateCoordinator[Optional[datetime]]):
 
     async def _async_update_data(self) -> datetime | None:
         """Update Vector data."""
-        # try:
-        battery_state = self.robot.get_battery_state().result()
-        version_state = self.robot.get_version_state().result()
+        try:
+            battery_state = self.robot.get_battery_state().result()
+            version_state = self.robot.get_version_state().result()
 
-        if battery_state:
-            self.states.update(
-                {
-                    STATE_ROBOT_BATTERY_VOLTS: round(battery_state.battery_volts, 2),
-                    STATE_ROBOT_BATTERY_LEVEL: BATTERYMAP_TO_STATE[
-                        battery_state.battery_level
-                    ],
-                    STATE_ROBOT_IS_CHARGNING: battery_state.is_charging,
-                    STATE_ROBOT_IS_ON_CHARGER: battery_state.is_on_charger_platform,
-                    STATE_ROBOT_SUGGESTED_CHARGE: battery_state.suggested_charger_sec,
-                }
-            )
-
-            if hasattr(battery_state, "cube_battery"):
-                cube_battery = battery_state.cube_battery
+            if battery_state:
                 self.states.update(
                     {
-                        STATE_CUBE_BATTERY_VOLTS: round(cube_battery.battery_volts, 2),
-                        STATE_CUBE_BATTERY_LEVEL: BATTERYMAP_TO_STATE[
-                            cube_battery.level
-                        ]
-                        or STATE_UNKNOWN,
-                        STATE_CUBE_FACTORY_ID: cube_battery.factory_id,
-                        STATE_CUBE_LAST_CONTACT: (
-                            datetime.utcnow()
-                            - timedelta(
-                                seconds=int(cube_battery.time_since_last_reading_sec)
-                            )
-                        ).astimezone(pytz.UTC),
+                        STATE_ROBOT_BATTERY_VOLTS: round(
+                            battery_state.battery_volts, 2
+                        ),
+                        STATE_ROBOT_BATTERY_LEVEL: BATTERYMAP_TO_STATE[
+                            battery_state.battery_level
+                        ],
+                        STATE_ROBOT_IS_CHARGNING: battery_state.is_charging,
+                        STATE_ROBOT_IS_ON_CHARGER: battery_state.is_on_charger_platform,
+                        STATE_ROBOT_SUGGESTED_CHARGE: battery_state.suggested_charger_sec,
                     }
                 )
 
-            dispatcher_send(self.hass, f"{UPDATE_SIGNAL}_battery")
+                if hasattr(battery_state, "cube_battery"):
+                    cube_battery = battery_state.cube_battery
+                    _LOGGER.debug("Cube level %s", cube_battery.level)
+                    self.states.update(
+                        {
+                            STATE_CUBE_BATTERY_VOLTS: round(
+                                cube_battery.battery_volts, 2
+                            ),
+                            STATE_CUBE_BATTERY_LEVEL: BATTERYMAP_TO_STATE[
+                                cube_battery.level
+                            ]
+                            or STATE_UNKNOWN,
+                            STATE_CUBE_FACTORY_ID: cube_battery.factory_id,
+                            STATE_CUBE_LAST_CONTACT: (
+                                datetime.utcnow()
+                                - timedelta(
+                                    seconds=int(
+                                        cube_battery.time_since_last_reading_sec
+                                    )
+                                )
+                            ).astimezone(pytz.UTC),
+                        }
+                    )
 
-        if version_state:
-            self.states.update({STATE_FIRMWARE_VERSION: version_state.os_version})
+                dispatcher_send(self.hass, f"{UPDATE_SIGNAL}_battery")
 
-            dispatcher_send(self.hass, UPDATE_SIGNAL)
+            if version_state:
+                self.states.update({STATE_FIRMWARE_VERSION: version_state.os_version})
 
-        return True
-        # except VectorConnectionException:
-        #     return False
+                dispatcher_send(self.hass, UPDATE_SIGNAL)
+
+            return True
+        except VectorConnectionException:
+            _LOGGER.warning("Experiencing connection issues with %s", self.name)
+            return False
+        except Exception:
+            _LOGGER.error(
+                "Something went horrible wrong with %s - reloading the integration",
+                self.name,
+            )
+            await async_reload_entry(self.hass, self.config_entry)

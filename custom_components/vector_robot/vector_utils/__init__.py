@@ -1,58 +1,144 @@
 """Vector utils used to fetch sentence data for Vector random speeches."""
+# pylint: disable=bare-except,unused-argument
 from __future__ import annotations
 
-import json
+import asyncio
+from enum import Enum
 import logging
-import os
-from datetime import datetime
-from typing import Any
 
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-
-from .const import BASE_URL, DATASETS
-from .exceptions import VectorDatasetException
+from ha_vector import AsyncRobot
+from ha_vector.connection import ControlPriorityLevel
 
 _LOGGER = logging.getLogger(__name__)
 
+# Sometimes Vector doesn't like to respond to commands, lets try again MAX_ATTEMPTS times.
+MAX_ATTEMPTS = 5
 
-class DataRunner:
-    """Data runner class."""
 
-    def __init__(self, hass: HomeAssistant, save_path: str) -> None:
-        """Initialize data runner object."""
-        self.last_refresh: datetime = None
-        self._client = async_get_clientsession(hass)
-        self._save_path = f"{save_path}-datasets"
+class VectorSpeechText:
+    """Speech message."""
 
-    async def async_refresh(self) -> None:
-        """Refresh all datasets."""
-        for data in DATASETS.items():
-            if data[1]:
-                _LOGGER.debug("Refreshing dataset %s", data[1])
-                await self.__async_fetch_dataset(data[1])
+    Text: str
+    Vector_Voice: bool = True
+    Speed: float | int = 1.0
+    Delay: float | int | None = None
 
-    async def __async_fetch_dataset(self, filename: str) -> None:
-        """Fetch dataset."""
-        data_url = (BASE_URL).format(filename)
-        res = await self._client.get(data_url)
 
-        if res.status != 200:
-            raise VectorDatasetException(f"Error fetching dataset from {data_url}")
+class VectorCommand(Enum):
+    """Supported Vector commands."""
 
-        dataset = await res.json(content_type="text/plain")
-        await self.__async_save_dataset(filename, dataset)
+    CHARGER_LEAVE = "behavior.drive_off_charger"
+    CHARGER_GO = "behavior.drive_on_charger"
 
-    async def __async_save_dataset(self, filename: str, dataset: Any) -> None:
-        """Save dataset to local destination."""
-        os.makedirs(str(self._save_path), exist_ok=True)
-        fullname = str(f"{self._save_path}/{filename}")
-        with os.fdopen(
-            os.open(fullname, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o666), "w"
-        ) as file:
-            json.dump(dataset, file)
 
-    @property
-    def path(self) -> str:
-        """Returns the path to the datasets."""
-        return self._save_path
+class VectorHandler(AsyncRobot):
+    """Custom handler for Vector actions."""
+
+    __has_control: bool = False
+
+    async def async_take_control(
+        self,
+        level: ControlPriorityLevel | None = None,
+        timeout: float = 1.0,
+    ) -> None:
+        """Take control of Vectors behavior."""
+        if not self.__has_control:
+            attempt = 0
+            while attempt < MAX_ATTEMPTS and not self.__has_control:
+                attempt = attempt + 1
+
+                try:
+                    await asyncio.wrap_future(
+                        self.conn.request_control(
+                            behavior_control_level=level, timeout=timeout
+                        )
+                    )
+                    self.__has_control = True
+                    return
+                except:
+                    _LOGGER.debug(
+                        "Couldn't get robot control, remaining tries: %s",
+                        MAX_ATTEMPTS - attempt,
+                    )
+                    await asyncio.sleep(1)
+
+                if attempt == MAX_ATTEMPTS:
+                    _LOGGER.error("Couldn't persuade Vector to be controlled :(")
+                    self.__has_control = False
+
+    async def async_release_control(
+        self,
+        timeout: float = 1.0,
+    ) -> None:
+        """Take control of Vectors behavior."""
+        if self.__has_control:
+            attempt = 0
+            while attempt < MAX_ATTEMPTS and self.__has_control:
+                attempt = attempt + 1
+
+                try:
+                    await asyncio.wrap_future(
+                        self.conn.release_control(timeout=timeout)
+                    )
+                    self.__has_control = False
+                    return
+                except:
+                    _LOGGER.debug(
+                        "Couldn't release robot control, remaining tries: %s",
+                        MAX_ATTEMPTS - attempt,
+                    )
+                    await asyncio.sleep(1)
+
+    async def async_speak(
+        self,
+        messages: list[VectorSpeechText],
+    ) -> None:
+        """Make Vector Home Assistant speech handler."""
+        # If Vector is doing something, don't speak
+        if self.status.is_pathing:
+            _LOGGER.info("I'm busy, cannot speak now...")
+            return
+
+        await self.async_take_control()
+
+        for message in messages:
+            if not isinstance(message.Delay, type(None)):
+                asyncio.sleep(message.Delay)
+
+            attempt = 0
+            while attempt < MAX_ATTEMPTS:
+                attempt = attempt + 1
+
+                try:
+                    await asyncio.wrap_future(
+                        self.behavior.say_text(
+                            text=message.Text,
+                            use_vector_voice=message.Vector_Voice,
+                            duration_scalar=message.Speed,
+                        )
+                    )
+                    return
+                except:
+                    _LOGGER.debug(
+                        "Couldn't send text to Vector, remaining tries: %s",
+                        MAX_ATTEMPTS - attempt,
+                    )
+                    await asyncio.sleep(1)
+
+                if attempt == MAX_ATTEMPTS:
+                    _LOGGER.error("Couldn't persuade Vector to speak :(")
+                    self.__has_control = False
+                    return
+
+        await self.async_release_control()
+
+    async def async_command(self, command: VectorCommand, *args, **kwargs) -> None:
+        """Send a command to Vector."""
+        cmd = getattr(self, command.value) if hasattr(self, command.value) else False
+        if not cmd:
+            _LOGGER.debug("Unknown or unsupported command called")
+            return
+
+        await self.async_take_control()
+        await asyncio.wrap_future(cmd())
+        await self.async_release_control()

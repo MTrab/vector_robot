@@ -1,5 +1,6 @@
 """Vector robot sensors."""
 from __future__ import annotations
+
 from dataclasses import dataclass
 from enum import IntEnum
 
@@ -174,11 +175,6 @@ class VectorBaseSensorEntity(VectorBase, SensorEntity):
             self.entity_description.state_attr in self.coordinator.states
             and not self.entity_description.key == VectorSensorFeature.OBSERVATION
         ):
-            _LOGGER.debug(
-                "Loading state %s from %s",
-                self.coordinator.states[self.entity_description.state_attr],
-                self.entity_description.state_attr,
-            )
             self._attr_native_value = self.coordinator.states[
                 self.entity_description.state_attr
             ]

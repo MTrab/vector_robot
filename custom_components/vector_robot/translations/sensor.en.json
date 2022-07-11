@@ -29,7 +29,9 @@
             "exploring": "Exploring the world",
             "reacttohand": "Reacting to a hand",
             "dancetothebeat": "Dancing to the beat",
-            "observingoncharger": "Observing from the charger"
+            "observingoncharger": "Observing from the charger",
+            "stuckonedge": "Stuck on an edge",
+            "reacttocliff": "Found a cliff"
         },
         "vector_robot__observations": {
             "no_data": "Nothing observed yet"
